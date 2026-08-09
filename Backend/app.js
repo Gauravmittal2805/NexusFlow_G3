@@ -15,4 +15,10 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Import Routes
+const telemetryRoutes = require('./routes/telemetryRoutes');
+
+// Mount Routes
+app.use('/api/telemetry', telemetryRoutes);
+
 module.exports = app;
