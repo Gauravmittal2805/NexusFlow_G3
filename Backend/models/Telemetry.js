@@ -20,6 +20,11 @@ const telemetrySchema = new mongoose.Schema({
   },
   rpm: {
     type: Number
+  },
+  status: {
+    type: String,
+    enum: ['NORMAL', 'WARNING'],
+    default: 'NORMAL'
   }
 }, {
   timeseries: {

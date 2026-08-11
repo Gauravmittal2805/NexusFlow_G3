@@ -1,24 +1,31 @@
-const API_URL = 'http://localhost:5005/api/telemetry';
+const API_URL = 'http://localhost:5000/api/telemetry';
 const SENSOR_ID = 'TURBINE-001';
 
-// Initial baseline values
-let currentTemp = 72;
-let currentPressure = 118;
-let currentRPM = 1790;
-let currentHumidity = 40;
+let currentTemp = 70;
+let currentPressure = 121;
+let currentRPM = 1840;
+let currentHumidity = 43;
 
-// Function to generate a random walk value
-const getNextValue = (current, minDelta, maxDelta) => {
-  const delta = (Math.random() * (maxDelta - minDelta) + minDelta);
-  return Number((current + delta).toFixed(2));
-};
+let step = 0;
 
 const sendTelemetryData = async () => {
-  // Update values with slight random fluctuations
-  currentTemp = getNextValue(currentTemp, -2, 2);
-  currentPressure = getNextValue(currentPressure, -3, 3);
-  currentRPM = getNextValue(currentRPM, -20, 20);
-  currentHumidity = getNextValue(currentHumidity, -1, 1);
+  step++;
+  
+  // Occasional anomaly: Shoot up temperature
+  if (step % 5 === 0) {
+    currentTemp += 6; 
+  } else {
+    // Normal continuous sequence
+    currentTemp += 1.2;
+    if (currentTemp > 85 && step % 5 !== 0) {
+      currentTemp = 70; // Reset
+    }
+  }
+
+  currentTemp = Number(currentTemp.toFixed(1));
+  currentPressure = Number((currentPressure + (Math.random() * 2 - 1)).toFixed(0));
+  currentRPM = Number((currentRPM + (Math.random() * 10 - 5)).toFixed(0));
+  currentHumidity = Number((currentHumidity + (Math.random() * 2 - 1)).toFixed(0));
 
   const payload = {
     sensorId: SENSOR_ID,
@@ -39,7 +46,7 @@ const sendTelemetryData = async () => {
     });
 
     if (response.ok) {
-      console.log(`[${payload.timestamp}] Sent data for ${SENSOR_ID}: Temp=${currentTemp}, Pressure=${currentPressure}, RPM=${currentRPM}`);
+      console.log(`[Mock Sensor] Temperature: ${currentTemp} -> Server received -> MongoDB stored -> WebSocket broadcast`);
     } else {
       console.error(`Failed to send data: ${response.status} - ${response.statusText}`);
     }
@@ -48,9 +55,6 @@ const sendTelemetryData = async () => {
   }
 };
 
-// Start simulating data every 3 seconds
-console.log(`Starting mock sensor for ${SENSOR_ID}...`);
+console.log(`Starting mock sensor...`);
 setInterval(sendTelemetryData, 3000);
-
-// Send the first reading immediately
 sendTelemetryData();

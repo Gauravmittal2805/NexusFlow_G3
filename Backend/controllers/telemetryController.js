@@ -1,22 +1,12 @@
 const Telemetry = require('../models/Telemetry');
+const { processTelemetry } = require('../services/telemetryService');
 
 // @desc    Create a new telemetry record
 // @route   POST /api/telemetry
 // @access  Public
 exports.createTelemetry = async (req, res) => {
     try {
-        const { sensorId, timestamp, temperature, pressure, humidity, rpm } = req.body;
-
-        const telemetry = new Telemetry({
-            sensorId,
-            timestamp: timestamp || new Date(),
-            temperature,
-            pressure,
-            humidity,
-            rpm
-        });
-
-        const savedTelemetry = await telemetry.save();
+        const savedTelemetry = await processTelemetry(req.body);
 
         res.status(201).json({
             success: true,
