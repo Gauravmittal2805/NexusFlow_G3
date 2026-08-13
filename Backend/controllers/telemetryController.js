@@ -13,6 +13,15 @@ exports.createTelemetry = async (req, res) => {
             data: savedTelemetry
         });
     } catch (error) {
+        // Validation error — bad request from client
+        if (error.statusCode === 400) {
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors: error.validationErrors
+            });
+        }
+
         console.error('Error creating telemetry:', error.message);
         res.status(500).json({
             success: false,

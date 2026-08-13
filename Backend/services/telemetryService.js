@@ -1,8 +1,18 @@
 const Telemetry = require('../models/Telemetry');
 const { getIo } = require('../websocket/telemetrySocket');
+const { validateTelemetry } = require('../utils/validateTelemetry');
 
 const processTelemetry = async (data) => {
-    // Derive Sensor Status based on temperature
+    // Step 1: Validate incoming telemetry data
+    const { isValid, errors } = validateTelemetry(data);
+    if (!isValid) {
+        const error = new Error(`Invalid telemetry data: ${errors.join(' | ')}`);
+        error.statusCode = 400;
+        error.validationErrors = errors;
+        throw error;
+    }
+
+    // Step 2: Derive Sensor Status based on temperature
     const status = data.temperature >= 80 ? 'WARNING' : 'NORMAL';
 
     const telemetry = new Telemetry({
