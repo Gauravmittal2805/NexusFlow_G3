@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api/telemetry';
+const API_URL = 'http://localhost:5005/api/telemetry';
 const SENSOR_ID = 'TURBINE-001';
 
 let currentTemp = 70;
