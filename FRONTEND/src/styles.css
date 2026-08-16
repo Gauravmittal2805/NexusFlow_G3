@@ -690,3 +690,38 @@ button {
     display: none;
   }
 }
+
+.connection-warning {
+  margin-bottom: 18px;
+  padding: 12px 15px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.live-badge.connected {
+  color: #15803d;
+}
+
+.live-badge.reconnecting {
+  color: #b45309;
+}
+
+.live-badge.disconnected {
+  color: #b91c1c;
+}
+
+.sensor-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sensor-selector-wrap label {
+  color: #8b95a6;
+  font-size: 10px;
+  font-weight: 600;
+}

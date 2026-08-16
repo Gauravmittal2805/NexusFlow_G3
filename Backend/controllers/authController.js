@@ -119,10 +119,37 @@ const loginUser = async (req, res) => {
 // @route   GET /api/auth/profile
 // @access  Private
 const getProfile = async (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Get profile route working (stub)'
-  });
+  try {
+    // req.user is set by the protect middleware
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 module.exports = {
