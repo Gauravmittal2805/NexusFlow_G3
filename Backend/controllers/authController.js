@@ -9,32 +9,51 @@ const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
 
-    // Validate input
-    if (!name || !email || !password) {
+    // Validate inputs individually
+    if (!name) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide name, email, and password'
+        message: 'Missing name'
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing email'
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing password'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email'
       });
     }
 
     // Check if user already exists
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: 'User already exists'
+        message: 'Duplicate email'
       });
     }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
 
     // Save User
     const user = await User.create({
       name,
       email,
-      password: hashedPassword
+      password
     });
 
     if (user) {
@@ -49,6 +68,12 @@ const registerUser = async (req, res) => {
       });
     }
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Duplicate email'
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message
@@ -63,29 +88,45 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
-    // Validate input
-    if (!email || !password) {
+    // Validate inputs
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password'
+        message: 'Missing email'
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing password'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email'
       });
     }
 
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'User not found'
       });
     }
 
-    // Compare passwords
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Compare passwords using Schema method
+    const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Wrong password'
       });
     }
 
