@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useTelemetry } from "../context/TelemetryContext";
 
 const items = [
   { label: "Dashboard", path: "/dashboard", icon: "▦" },
@@ -10,6 +11,8 @@ const items = [
 ];
 
 export default function Sidebar() {
+  const { connected } = useTelemetry();
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -39,10 +42,10 @@ export default function Sidebar() {
 
       <div className="sidebar-bottom">
         <div className="connection-box">
-          <span className="live-dot" />
+          <span className={connected ? "live-dot" : "offline-dot"} />
           <div>
-            <strong>Telemetry Live</strong>
-            <small>Mock stream active</small>
+            <strong>{connected ? "Telemetry Live" : "Disconnected"}</strong>
+            <small>{connected ? "WebSocket Connected" : "Backend Offline"}</small>
           </div>
         </div>
       </div>
