@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ProtectedRoute from "./routes/ProtectedRoute";
 import FlowBuilder from "./pages/FlowBuilder";
 
 const Placeholder = ({ title }) => (
@@ -16,16 +19,22 @@ const Placeholder = ({ title }) => (
 export default function App() {
   return (
     <Routes>
-      <Route element={<DashboardLayout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/sensors" element={<Placeholder title="Sensors" />} />
-        <Route path="/flow" element={<FlowBuilder />} />
-        <Route path="/alerts" element={<Placeholder title="Alerts" />} />
-        <Route path="/analytics" element={<Placeholder title="Analytics" />} />
-        <Route path="/settings" element={<Placeholder title="Settings" />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<DashboardLayout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="sensors" element={<Placeholder title="Sensors" />} />
+          <Route path="flow" element={<Placeholder title="Rule Builder" />} />
+          <Route path="alerts" element={<Placeholder title="Alerts" />} />
+          <Route path="analytics" element={<Placeholder title="Analytics" />} />
+          <Route path="settings" element={<Placeholder title="Settings" />} />
+        </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

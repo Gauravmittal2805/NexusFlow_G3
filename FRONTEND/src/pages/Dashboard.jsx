@@ -1,10 +1,13 @@
 import { useTelemetry } from "../context/TelemetryContext";
+import { useAuth } from "../context/AuthContext";
 
 import SensorCard from "../components/SensorCard";
 import TelemetryChart from "../components/TelemetryChart";
 import RecentAlerts from "../components/RecentAlerts";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   const {
     sensors,
     history,
@@ -33,7 +36,7 @@ export default function Dashboard() {
           </span>
 
           <h1>
-            Hello, Admin
+            Hello, {user?.name || "User"}
           </h1>
 
         </div>
