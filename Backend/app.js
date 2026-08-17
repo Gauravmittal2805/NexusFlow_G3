@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
+const ruleRoutes = require('./routes/ruleRoutes');
 const app = express();
 
 app.use(cors({
@@ -8,6 +9,14 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json());
+
+// Trim whitespace from URLs (prevents 404 from trailing spaces in Postman/clients)
+app.use((req, res, next) => {
+    if (req.url) {
+        req.url = req.url.trim();
+    }
+    next();
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -18,6 +27,7 @@ app.get('/api/health', (req, res) => {
 });
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/rules', ruleRoutes);
 
 // REST telemetry endpoint (returns latest mock data)
 app.get('/telemetry', (req, res) => {
