@@ -193,8 +193,136 @@ const getProfile = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const { name, email, password } = req.body || {};
+
+    if (email !== undefined || password !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password cannot be updated through this endpoint'
+      });
+    }
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Name is required'
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.name = name.trim();
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is required'
+      });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password is required'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Incorrect current password'
+      });
+    }
+
+    const isSamePassword = await user.matchPassword(newPassword);
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be different from current password'
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
-  getProfile
+  getProfile,
+  updateProfile,
+  changePassword
 };

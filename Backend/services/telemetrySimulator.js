@@ -3,7 +3,7 @@ const { getIo } = require('../websocket/telemetrySocket');
 
 // ─── Simulator config ────────────────────────────────────────────────────────
 
-const INTERVAL_MS = 2000; // emit every 2 seconds
+const INTERVAL_MS = 10000; // emit every 2 seconds
 
 /**
  * Each turbine has its own live state that drifts continuously.
