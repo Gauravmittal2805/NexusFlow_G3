@@ -1,4 +1,17 @@
+import { useAuth } from "../context/AuthContext";
+
 export default function Navbar() {
+  const { user, logout } = useAuth();
+
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "NF";
+
   return (
     <header className="navbar">
       <div>
@@ -13,12 +26,16 @@ export default function Navbar() {
         </button>
 
         <div className="user-chip">
-          <div className="avatar">AD</div>
+          <div className="avatar">{initials}</div>
           <div>
-            <strong>Admin</strong>
-            <span>Factory Manager</span>
+            <strong>{user?.name || "User"}</strong>
+            <span>{user?.email || ""}</span>
           </div>
         </div>
+
+        <button className="logout-button" onClick={logout}>
+          Logout
+        </button>
       </div>
     </header>
   );
