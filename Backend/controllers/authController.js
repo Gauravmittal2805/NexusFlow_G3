@@ -7,7 +7,7 @@ const User = require('../models/User');
 // @access  Public
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { name, email, password, role } = req.body || {};
 
     // Validate inputs individually
     if (!name) {
@@ -28,6 +28,13 @@ const registerUser = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Missing password'
+      });
+    }
+
+    if (role && !['admin', 'operator', 'viewer'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role'
       });
     }
 
@@ -53,7 +60,8 @@ const registerUser = async (req, res) => {
     const user = await User.create({
       name,
       email,
-      password
+      password,
+      role: role || 'viewer'
     });
 
     if (user) {
@@ -132,7 +140,7 @@ const loginUser = async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET || 'fallback_secret',
       { expiresIn: '30d' }
     );
@@ -145,7 +153,8 @@ const loginUser = async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role
       }
     });
   } catch (error) {
@@ -182,7 +191,8 @@ const getProfile = async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role
       }
     });
   } catch (error) {
