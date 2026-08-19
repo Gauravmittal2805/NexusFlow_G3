@@ -1,104 +1,71 @@
 const EventEmitter = require('events');
-const { getActiveRules } = require('./ruleService');
+const ruleService = require('./ruleService');
+const { evaluateRule } = require('./ruleEvaluator');
 
 // Internal Event Emitter for Rule Engine events (Step 9)
 class RuleEventEmitter extends EventEmitter {}
 const ruleEventEmitter = new RuleEventEmitter();
 
 /**
- * Process incoming telemetry stream and match against active rules (Steps 6-10).
+ * Process incoming telemetry stream and evaluate against active rules (Steps 6-10).
  *
- * @param {Object} telemetryData - incoming telemetry reading
- * @param {string} telemetryData.sensorId - e.g. "TURBINE-001"
- * @param {number} [telemetryData.temperature]
- * @param {number} [telemetryData.pressure]
- * @param {number} [telemetryData.humidity]
- * @param {number} [telemetryData.rpm]
- * @param {Date|string} [telemetryData.timestamp]
+ * Flow:
+ * Telemetry -> Active Rules -> Sensor Matching -> Rule Evaluator -> Condition Evaluator -> TRUE / FALSE
+ * If TRUE -> Emit 'rule:triggered' event
+ * If FALSE -> Ignore
+ *
+ * @param {Object} telemetryData - incoming telemetry reading e.g. { sensorId: "TURBINE-001", temperature: 82.4 }
  */
 const processTelemetry = async (telemetryData) => {
-  const { sensorId, timestamp, temperature, pressure, humidity, rpm } = telemetryData;
+  if (!telemetryData || !telemetryData.sensorId) return;
 
-  if (!sensorId) return;
+  const { sensorId, timestamp } = telemetryData;
 
   // Step 10 Log: Telemetry received
-  console.log(`[RuleEngine] Telemetry received: ${sensorId}`);
+  console.log(`[RuleEngine] Telemetry received for sensor: ${sensorId}`);
 
-  // Step 4 & 5: Fetch active rules only
-  const activeRules = await getActiveRules();
-  if (!activeRules || activeRules.length === 0) {
+  // Fetch active rules only
+  const activeRules = await ruleService.getActiveRules();
+  if (!activeRules || !Array.isArray(activeRules) || activeRules.length === 0) {
     return;
   }
 
-  // Iterate over active rules to match sensor nodes (Step 6 & 7)
+  // Iterate over active rules to evaluate against telemetry (Steps 6-10)
   for (const rule of activeRules) {
-    const nodes = rule.nodes || [];
+    const evalResult = evaluateRule(rule, telemetryData);
 
-    // Find sensor node matching the incoming telemetry sensorId
-    const matchingSensorNode = nodes.find((node) => {
-      const isSensorType = node.type === 'sensor' || node.type === 'sensorNode';
-      if (!isSensorType) return false;
+    if (evalResult.matched) {
+      const eventTimestamp = timestamp
+        ? typeof timestamp === 'string'
+          ? timestamp
+          : timestamp.toISOString()
+        : new Date().toISOString();
 
-      const nodeSensorId = node.data?.sensorId || node.data?.sensor;
-      // Match by exact sensorId (e.g. TURBINE-001) or standard prefix
-      return (
-        nodeSensorId === sensorId ||
-        sensorId.startsWith(String(nodeSensorId)) ||
-        String(nodeSensorId).startsWith(sensorId)
-      );
-    });
+      // Step 9: Generate Rule Trigger Event 'rule:triggered'
+      const triggerPayload = {
+        ruleId: evalResult.ruleId,
+        sensorId: evalResult.sensorId,
+        timestamp: eventTimestamp,
+      };
 
-    if (matchingSensorNode) {
-      // Step 10 Log: Active rule found & Sensor matched
-      console.log(`[RuleEngine] Active rule found: ${rule.name}`);
-      console.log(`[RuleEngine] Sensor matched: ${sensorId}`);
+      console.log(`[RuleEngine] Rule triggered: ${rule.name || evalResult.ruleId} for sensor ${sensorId}`);
 
-      // Extract condition node from graph (if present) for Step 8 evaluation input
-      const conditionNode = nodes.find(
-        (node) => node.type === 'condition' || node.type === 'conditionNode'
-      );
+      // Emit 'rule:triggered' event (Step 9)
+      ruleEventEmitter.emit('rule:triggered', triggerPayload);
 
-      const conditionData = conditionNode
-        ? {
-            field: conditionNode.data?.field || conditionNode.data?.sensor || 'temperature',
-            operator: conditionNode.data?.operator || '>',
-            value: conditionNode.data?.value !== undefined ? conditionNode.data.value : 80,
-          }
-        : {
-            field: 'temperature',
-            operator: '>',
-            value: 80,
-          };
-
-      // Step 8: Prepare common structure for future engine execution
-      const evaluationInput = {
-        ruleId: rule._id.toString(),
-        sensorId,
-        telemetry: {
-          temperature,
-          pressure,
-          humidity,
-          rpm,
+      // Backwards-compatible emission for 'rule:matched'
+      ruleEventEmitter.emit('rule:matched', {
+        ...triggerPayload,
+        evaluationInput: {
+          ruleId: evalResult.ruleId,
+          sensorId,
+          telemetry: telemetryData,
+          condition: rule.nodes?.find((n) => n.type === 'condition' || n.type === 'conditionNode')?.data,
         },
-        condition: conditionData,
-      };
-
-      // Step 10 Log: Rule ready for evaluation
-      console.log(`[RuleEngine] Rule ready for evaluation`);
-
-      // Step 9: Emit internal `rule:matched` event
-      const eventPayload = {
-        ruleId: rule._id.toString(),
-        sensorId,
-        timestamp: timestamp
-          ? typeof timestamp === 'string'
-            ? timestamp
-            : timestamp.toISOString()
-          : new Date().toISOString(),
-        evaluationInput,
-      };
-
-      ruleEventEmitter.emit('rule:matched', eventPayload);
+      });
+    } else {
+      // Step 8: Non-matching condition, ignore
+      console.log(`[RuleEngine] Condition evaluated FALSE for rule ${rule.name || rule._id} — ignored.`);
     }
   }
 };
