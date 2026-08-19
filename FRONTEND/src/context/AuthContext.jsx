@@ -7,16 +7,14 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import api, {
-  loginRequest,
-  profileRequest,
-  registerRequest,
-} from "../services/api";
+import api from "../services/api";
+import { getProfile, loginUser, registerUser } from "../services/authService";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [loading, setLoading] = useState(true);
@@ -30,12 +28,20 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     clearAuth();
+    setSessionMessage("");
     navigate("/login", { replace: true });
   }, [clearAuth, navigate]);
 
+  const refreshProfile = useCallback(async () => {
+    const response = await getProfile();
+    const profileUser = response.data?.user || null;
+    setUser(profileUser);
+    return profileUser;
+  }, []);
+
   const login = useCallback(
     async (email, password) => {
-      const response = await loginRequest({ email, password });
+      const response = await loginUser({ email, password });
       const receivedToken = response.data?.token;
 
       if (!receivedToken) {
@@ -44,35 +50,23 @@ export function AuthProvider({ children }) {
 
       localStorage.setItem("token", receivedToken);
       setToken(receivedToken);
-
-      // Use the profile endpoint after login so the frontend is using
-      // the same authenticated user information as the backend.
-      const profileResponse = await profileRequest();
-      const loggedInUser = profileResponse.data?.user;
-
-      setUser(loggedInUser || response.data?.user || null);
       setSessionMessage("");
 
-      navigate("/dashboard", { replace: true });
+      // Always fetch the profile so role/user data comes from the backend.
+      const loggedInUser = await refreshProfile();
 
-      return loggedInUser || response.data?.user;
+      navigate("/dashboard", { replace: true });
+      return loggedInUser;
     },
-    [navigate]
+    [navigate, refreshProfile]
   );
 
   const register = useCallback(async (name, email, password) => {
-    const response = await registerRequest({ name, email, password });
+    const response = await registerUser({ name, email, password });
     return response.data;
   }, []);
 
-  const refreshProfile = useCallback(async () => {
-    const response = await profileRequest();
-    const profileUser = response.data?.user;
-    setUser(profileUser || null);
-    return profileUser;
-  }, []);
-
-  // Restore the session after a browser refresh.
+  // Day 2: restore the authenticated session after a browser refresh.
   useEffect(() => {
     let mounted = true;
 
@@ -80,17 +74,23 @@ export function AuthProvider({ children }) {
       const storedToken = localStorage.getItem("token");
 
       if (!storedToken) {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setToken(null);
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
 
+      setToken(storedToken);
+
       try {
-        if (mounted) setToken(storedToken);
         await refreshProfile();
       } catch (error) {
         if (error.response?.status === 401) {
           clearAuth();
         } else {
+          // If the server is unavailable, don't keep a broken session.
           clearAuth();
         }
       } finally {
@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
     };
   }, [clearAuth, refreshProfile]);
 
-  // Handle any protected API request that becomes unauthorized.
+  // Day 2: central 401 handling for protected API requests.
   useEffect(() => {
     const interceptorId = api.interceptors.response.use(
       (response) => response,
@@ -126,9 +126,7 @@ export function AuthProvider({ children }) {
       }
     );
 
-    return () => {
-      api.interceptors.response.eject(interceptorId);
-    };
+    return () => api.interceptors.response.eject(interceptorId);
   }, [clearAuth, navigate]);
 
   const value = useMemo(
