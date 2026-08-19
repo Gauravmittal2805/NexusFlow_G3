@@ -138,6 +138,18 @@ const loginUser = async (req, res) => {
       });
     }
 
+    // Check if account is active
+    if (user.status === 'inactive') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is inactive'
+      });
+    }
+
+    // Update lastLoginAt
+    user.lastLoginAt = new Date();
+    await user.save();
+
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id, role: user.role },
@@ -154,7 +166,9 @@ const loginUser = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        status: user.status,
+        lastLoginAt: user.lastLoginAt
       }
     });
   } catch (error) {
@@ -192,7 +206,8 @@ const getProfile = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        status: user.status
       }
     });
   } catch (error) {

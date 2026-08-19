@@ -3,6 +3,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const ruleRoutes = require('./routes/ruleRoutes');
 const sensorRoutes = require('./routes/sensorRoutes');
+const userRoutes = require('./routes/userRoutes');
 const app = express();
 
 app.use(cors({
@@ -30,6 +31,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/rules', ruleRoutes);
 app.use('/api/sensors', sensorRoutes);
+app.use('/api/users', userRoutes);
 
 // REST telemetry endpoint (returns latest mock data)
 app.get('/telemetry', (req, res) => {
