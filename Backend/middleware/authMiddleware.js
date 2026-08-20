@@ -7,7 +7,7 @@ const protect = async (req, res, next) => {
   if (!req.headers.authorization) {
     return res.status(401).json({
       success: false,
-      message: 'Missing token'
+      message: 'Authentication required'
     });
   }
 
@@ -15,7 +15,7 @@ const protect = async (req, res, next) => {
   if (!req.headers.authorization.startsWith('Bearer')) {
     return res.status(401).json({
       success: false,
-      message: 'Invalid token'
+      message: 'Authentication required'
     });
   }
 
@@ -25,7 +25,7 @@ const protect = async (req, res, next) => {
   if (!token || token === 'null' || token === 'undefined') {
     return res.status(401).json({
       success: false,
-      message: 'Missing token'
+      message: 'Authentication required'
     });
   }
 
@@ -41,12 +41,12 @@ const protect = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
-        message: 'Expired token'
+        message: 'Authentication required'
       });
     }
     return res.status(401).json({
       success: false,
-      message: 'Invalid token'
+      message: 'Authentication required'
     });
   }
 };

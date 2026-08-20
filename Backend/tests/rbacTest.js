@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const app = require('../app');
 const User = require('../models/User');
 const Sensor = require('../models/Sensor');
+const Rule = require('../models/Rule');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey123';
 
@@ -184,19 +185,29 @@ async function runRbacTests() {
     // --- TEST 4: DELETE /api/rules/:id (Allowed for Admin, Forbidden for Operator and Viewer) ---
     console.log('\n--- Test 4: DELETE /api/rules/:id (Admin allowed, Operator/Viewer forbidden) ---');
 
-    const deleteRuleViewerRes = await makeRequest(server, 'DELETE', '/api/rules/test-rule-id', viewerToken);
+    // Create a real rule in the DB owned by admin so it can be deleted
+    const testRule = await Rule.create({
+      name: 'RBAC Test Rule',
+      nodes: [{ id: 'n1', type: 'sensor', data: {} }],
+      edges: [],
+      createdBy: adminUser._id,
+      isActive: true
+    });
+    const testRuleId = testRule._id.toString();
+
+    const deleteRuleViewerRes = await makeRequest(server, 'DELETE', `/api/rules/${testRuleId}`, viewerToken);
     if (deleteRuleViewerRes.status !== 403) {
       throw new Error(`Viewer DELETE /api/rules expected 403 Forbidden, got ${deleteRuleViewerRes.status}`);
     }
     console.log('✅ Viewer DELETE rule: Forbidden (403)');
 
-    const deleteRuleOperatorRes = await makeRequest(server, 'DELETE', '/api/rules/test-rule-id', operatorToken);
+    const deleteRuleOperatorRes = await makeRequest(server, 'DELETE', `/api/rules/${testRuleId}`, operatorToken);
     if (deleteRuleOperatorRes.status !== 403) {
       throw new Error(`Operator DELETE /api/rules expected 403 Forbidden, got ${deleteRuleOperatorRes.status}`);
     }
     console.log('✅ Operator DELETE rule: Forbidden (403)');
 
-    const deleteRuleAdminRes = await makeRequest(server, 'DELETE', '/api/rules/test-rule-id', adminToken);
+    const deleteRuleAdminRes = await makeRequest(server, 'DELETE', `/api/rules/${testRuleId}`, adminToken);
     if (deleteRuleAdminRes.status !== 200 || !deleteRuleAdminRes.body.success) {
       throw new Error(`Admin DELETE /api/rules expected 200 OK, got ${deleteRuleAdminRes.status}`);
     }
@@ -206,6 +217,7 @@ async function runRbacTests() {
     // Clean up test data
     await User.deleteMany({ email: /test_rbac_/ });
     await Sensor.deleteMany({ sensorId: /^TEST_RBAC_/ });
+    await Rule.deleteMany({ name: 'RBAC Test Rule' });
 
     server.close();
     await mongoose.connection.close();
