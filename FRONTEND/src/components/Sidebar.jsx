@@ -1,17 +1,24 @@
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import { hasPermission } from "./RoleBasedAccess";
 
 const items = [
-  { label: "Dashboard", path: "/dashboard", icon: "▦" },
-  { label: "Rule Builder", path: "/flow", icon: "⌘" },
-  { label: "Sensors", path: "/sensors", icon: "◉" },
-  { label: "Alerts", path: "/alerts", icon: "!" },
-  { label: "Analytics", path: "/analytics", icon: "▥" },
-  { label: "Settings", path: "/settings", icon: "⚙" },
+  { label: "Dashboard", path: "/dashboard", icon: "▦", permission: "dashboard" },
+  { label: "Rule Builder", path: "/flow", icon: "⌘", permission: "flow" },
+  { label: "Sensors", path: "/sensors", icon: "◉", permission: "sensors" },
+  { label: "Alerts", path: "/alerts", icon: "!", permission: "alerts" },
+  { label: "Analytics", path: "/analytics", icon: "▥", permission: "analytics" },
+  { label: "Settings", path: "/settings", icon: "⚙", permission: "settings" },
 ];
 
 export default function Sidebar() {
+  const { user } = useAuth();
   const { connected } = useTelemetry();
+
+  const visibleItems = items.filter((item) =>
+    hasPermission(user?.role, item.permission)
+  );
 
   return (
     <aside className="sidebar">
@@ -26,7 +33,7 @@ export default function Sidebar() {
       <div className="side-label">Workspace</div>
 
       <nav className="nav-list">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -45,7 +52,9 @@ export default function Sidebar() {
           <span className={connected ? "live-dot" : "offline-dot"} />
           <div>
             <strong>{connected ? "Telemetry Live" : "Disconnected"}</strong>
-            <small>{connected ? "WebSocket Connected" : "Backend Offline"}</small>
+            <small>
+              {connected ? "WebSocket Connected" : "Backend Offline"}
+            </small>
           </div>
         </div>
       </div>

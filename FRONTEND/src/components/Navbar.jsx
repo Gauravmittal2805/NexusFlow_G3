@@ -12,6 +12,10 @@ export default function Navbar() {
         .toUpperCase()
     : "NF";
 
+  const roleLabel = user?.role
+    ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
+    : "User";
+
   return (
     <header className="navbar">
       <div>
@@ -29,7 +33,7 @@ export default function Navbar() {
           <div className="avatar">{initials}</div>
           <div>
             <strong>{user?.name || "User"}</strong>
-            <span>{user?.email || ""}</span>
+            <span>{user?.role ? roleLabel : user?.email || ""}</span>
           </div>
         </div>
 
