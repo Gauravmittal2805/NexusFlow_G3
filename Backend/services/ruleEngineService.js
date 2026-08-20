@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const ruleService = require('./ruleService');
 const { evaluateRule } = require('./ruleEvaluator');
+const { processRuleTrigger } = require('./alertService');
 
 // Internal Event Emitter for Rule Engine events (Step 9)
 class RuleEventEmitter extends EventEmitter {}
@@ -11,7 +12,7 @@ const ruleEventEmitter = new RuleEventEmitter();
  *
  * Flow:
  * Telemetry -> Active Rules -> Sensor Matching -> Rule Evaluator -> Condition Evaluator -> TRUE / FALSE
- * If TRUE -> Emit 'rule:triggered' event
+ * If TRUE -> Emit 'rule:triggered' event + Create Alert (with cooldown)
  * If FALSE -> Ignore
  *
  * @param {Object} telemetryData - incoming telemetry reading e.g. { sensorId: "TURBINE-001", temperature: 82.4 }
@@ -63,6 +64,14 @@ const processTelemetry = async (telemetryData) => {
           condition: rule.nodes?.find((n) => n.type === 'condition' || n.type === 'conditionNode')?.data,
         },
       });
+
+      // Step 4 & Step 10: Create Alert in MongoDB + Broadcast via Socket.IO (with cooldown check)
+      try {
+        await processRuleTrigger(rule, telemetryData);
+      } catch (alertErr) {
+        console.error(`[RuleEngine] Alert creation failed for rule "${rule.name}":`, alertErr.message);
+      }
+
     } else {
       // Step 8: Non-matching condition, ignore
       console.log(`[RuleEngine] Condition evaluated FALSE for rule ${rule.name || rule._id} — ignored.`);
