@@ -1,6 +1,7 @@
 const Telemetry = require('../models/Telemetry');
 const { getIo } = require('../websocket/telemetrySocket');
 const { validateTelemetry } = require('../utils/validateTelemetry');
+const { processTelemetry: evaluateRuleTelemetry } = require('./ruleEngineService');
 
 const processTelemetry = async (data) => {
     // Step 1: Validate incoming telemetry data
@@ -30,6 +31,13 @@ const processTelemetry = async (data) => {
         io.emit('telemetry:update', savedTelemetry);
     } catch (err) {
         console.error('Socket.IO emit error:', err.message);
+    }
+
+    // Pass to Rule Engine for evaluation (Step 10)
+    try {
+        await evaluateRuleTelemetry(savedTelemetry.toObject ? savedTelemetry.toObject() : savedTelemetry);
+    } catch (ruleErr) {
+        console.error('[TelemetryService] Rule evaluation error:', ruleErr.message);
     }
 
     return savedTelemetry;

@@ -4,6 +4,9 @@ const {
   createRule,
   getRules,
   getRuleById,
+  updateRule,
+  deleteRule,
+  updateRuleStatus,
   toggleRuleStatus,
 } = require('../controllers/ruleController');
 const { protect } = require('../middleware/authMiddleware');
@@ -31,5 +34,16 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
     message: 'Rule deleted successfully (auth verified)'
   });
 });
+// PUT /api/rules/:id - Update rule (Step 1)
+router.put('/:id', updateRule);
+
+// DELETE /api/rules/:id - Delete rule (Step 2)
+router.delete('/:id', deleteRule);
+
+// PATCH /api/rules/:id/status - Update rule active status (Step 3)
+router.patch('/:id/status', updateRuleStatus);
+
+// PATCH /api/rules/:id/toggle - Toggle rule active status
+router.patch('/:id/toggle', toggleRuleStatus);
 
 module.exports = router;

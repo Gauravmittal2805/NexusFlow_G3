@@ -27,7 +27,7 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="sensors" element={<Placeholder title="Sensors" />} />
-          <Route path="flow" element={<Placeholder title="Rule Builder" />} />
+          <Route path="flow" element={<FlowBuilder />} />
           <Route path="alerts" element={<Placeholder title="Alerts" />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />
           <Route path="settings" element={<Placeholder title="Settings" />} />

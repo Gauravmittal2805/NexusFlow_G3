@@ -34,4 +34,16 @@ export const loginRequest = (payload) =>
 export const profileRequest = () =>
   api.get("/api/auth/profile");
 
+export const createRuleRequest = (payload) =>
+  api.post("/api/rules", payload);
+
+export const getRulesRequest = () =>
+  api.get("/api/rules");
+
+export const getRuleByIdRequest = (id) =>
+  api.get(`/api/rules/${id}`);
+
+export const toggleRuleStatusRequest = (id) =>
+  api.patch(`/api/rules/${id}/toggle`);
+
 export default api;

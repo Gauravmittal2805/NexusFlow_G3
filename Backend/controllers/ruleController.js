@@ -1,7 +1,7 @@
 const Rule = require('../models/Rule');
 
 /**
- * Helper function to validate React Flow graph rule structure (Step 6)
+ * Helper function to validate React Flow graph rule structure
  * Minimum validation:
  * ✓ name exists and is a string
  * ✓ nodes is an array
@@ -130,6 +130,151 @@ const getRuleById = async (req, res) => {
   }
 };
 
+// @desc    Update a rule (PUT /api/rules/:id) - Step 1
+// @access  Private
+const updateRule = async (req, res) => {
+  try {
+    const rule = await Rule.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id,
+    });
+
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+
+    const { name, description, nodes, edges, isActive } = req.body;
+
+    // Validate if name, nodes, or edges are provided
+    if (name !== undefined || nodes !== undefined || edges !== undefined) {
+      const payloadToValidate = {
+        name: name !== undefined ? name : rule.name,
+        nodes: nodes !== undefined ? nodes : rule.nodes,
+        edges: edges !== undefined ? edges : rule.edges,
+      };
+      const validationError = validateRuleInput(payloadToValidate);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          message: validationError,
+        });
+      }
+    }
+
+    if (name !== undefined) rule.name = name.trim();
+    if (description !== undefined) rule.description = description.trim();
+    if (nodes !== undefined) rule.nodes = nodes;
+    if (edges !== undefined) rule.edges = edges;
+    if (isActive !== undefined) rule.isActive = Boolean(isActive);
+
+    await rule.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Rule updated successfully',
+      rule,
+    });
+  } catch (error) {
+    console.error('Error updating rule:', error);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while updating rule',
+    });
+  }
+};
+
+// @desc    Delete a rule (DELETE /api/rules/:id) - Step 2
+// @access  Private
+const deleteRule = async (req, res) => {
+  try {
+    const rule = await Rule.findOneAndDelete({
+      _id: req.params.id,
+      createdBy: req.user.id,
+    });
+
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Rule deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting rule:', error);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while deleting rule',
+    });
+  }
+};
+
+// @desc    Explicit Enable/Disable Rule Status (PATCH /api/rules/:id/status) - Step 3
+// @access  Private
+const updateRuleStatus = async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    if (isActive === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Field 'isActive' boolean is required",
+      });
+    }
+
+    const rule = await Rule.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id,
+    });
+
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+
+    rule.isActive = Boolean(isActive);
+    await rule.save();
+
+    const actionText = rule.isActive ? 'enabled' : 'disabled';
+    return res.status(200).json({
+      success: true,
+      message: `Rule ${actionText} successfully`,
+      rule,
+    });
+  } catch (error) {
+    console.error('Error updating rule status:', error);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while updating rule status',
+    });
+  }
+};
+
 // @desc    Toggle rule active/inactive status (PATCH /api/rules/:id/toggle)
 // @access  Private
 const toggleRuleStatus = async (req, res) => {
@@ -173,5 +318,8 @@ module.exports = {
   createRule,
   getRules,
   getRuleById,
+  updateRule,
+  deleteRule,
+  updateRuleStatus,
   toggleRuleStatus,
 };
