@@ -32,6 +32,7 @@ async function runTests() {
       name: 'User A',
       email: `test_rule_a_${Date.now()}@example.com`,
       password: 'password123',
+      role: 'admin',
     });
     const tokenA = jwt.sign({ userId: userA._id.toString() }, JWT_SECRET);
 
@@ -39,6 +40,7 @@ async function runTests() {
       name: 'User B',
       email: `test_rule_b_${Date.now()}@example.com`,
       password: 'password123',
+      role: 'admin',
     });
     const tokenB = jwt.sign({ userId: userB._id.toString() }, JWT_SECRET);
 
