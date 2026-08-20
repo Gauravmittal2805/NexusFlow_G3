@@ -978,3 +978,519 @@ button {
     padding: 7px 8px;
   }
 }
+
+/* ==========================================
+   NEXUSFLOW RULE BUILDER & REACT FLOW STYLES
+   ========================================== */
+
+.flow-builder-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 70px);
+  padding: 16px 24px;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.flow-builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: white;
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.flow-builder-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.flow-builder-title p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.rule-name-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rule-name-input-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.rule-name-input {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+  min-width: 260px;
+}
+
+.rule-name-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* Workspace Layout */
+.flow-builder-workspace {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  min-height: 520px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Node Library Panel */
+.node-library-panel {
+  width: 260px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.panel-subtitle {
+  margin: 3px 0 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.node-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.category-title {
+  margin: 0 0 8px 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.category-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.draggable-node-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: grab;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.draggable-node-item:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.draggable-node-item:active {
+  cursor: grabbing;
+}
+
+.item-icon {
+  font-size: 16px;
+}
+
+/* Canvas Wrapper & Container */
+.flow-canvas-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.flow-canvas-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.canvas-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 10;
+}
+
+.canvas-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.canvas-status-dot.valid {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+
+.canvas-status-dot.invalid {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.canvas-status-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.canvas-node-count {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.canvas-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-secondary {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.btn-save {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(99, 102, 241, 0.35);
+}
+
+/* ReactFlow Component Height & Controls */
+.react-flow {
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1;
+}
+
+/* Custom Flow Nodes Styling */
+.flow-custom-node {
+  background: white;
+  border: 2px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 190px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  font-size: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.flow-custom-node.is-selected {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.flow-custom-node.sensor-node {
+  border-left: 4px solid #3b82f6;
+}
+
+.flow-custom-node.movingAverageNode,
+.flow-custom-node.processingNode {
+  border-left: 4px solid #8b5cf6;
+}
+
+.flow-custom-node.conditionNode {
+  border-left: 4px solid #f59e0b;
+}
+
+.flow-custom-node.alertNode {
+  border-left: 4px solid #ef4444;
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 8px;
+}
+
+.node-icon {
+  font-size: 16px;
+}
+
+.node-title {
+  font-weight: 700;
+  color: #0f172a;
+  flex: 1;
+}
+
+.node-action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.node-action-btn:hover {
+  background: #f1f5f9;
+}
+
+.node-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.node-input-select,
+.node-input-text {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  color: #0f172a;
+  outline: none;
+  background: white;
+  width: 100px;
+}
+
+.node-input-select:focus,
+.node-input-text:focus {
+  border-color: #6366f1;
+}
+
+.metric-unit-badge {
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* React Flow Handles */
+.flow-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: #6366f1 !important;
+  border: 2px solid white !important;
+}
+
+.flow-handle.handle-top {
+  top: -6px !important;
+}
+
+.flow-handle.handle-bottom {
+  bottom: -6px !important;
+}
+
+/* Toast Banner */
+.save-toast-banner {
+  position: absolute;
+  top: 60px;
+  right: 20px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideInToast 0.3s ease-out;
+}
+
+.save-toast-banner.success {
+  background: #10b981;
+  color: white;
+}
+
+.save-toast-banner.error {
+  background: #ef4444;
+  color: white;
+}
+
+.save-toast-banner.info {
+  background: #3b82f6;
+  color: white;
+}
+
+@keyframes slideInToast {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal Backdrops & JSON Viewer */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal-content.json-modal {
+  background: white;
+  width: 90%;
+  max-width: 620px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal-desc {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.json-code-block {
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 16px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
