@@ -1,5 +1,6 @@
 const Telemetry = require('../models/Telemetry');
 const { getIo } = require('../websocket/telemetrySocket');
+const { processTelemetry } = require('./ruleEngineService');
 
 // ─── Simulator config ────────────────────────────────────────────────────────
 
@@ -126,6 +127,13 @@ async function broadcastAndSave() {
             rpm:         payload.rpm,
             status:      payload.status,
         });
+
+        // ── 3. Pass telemetry stream to active Rule Engine (Steps 6-10) ──
+        try {
+            await processTelemetry(payload);
+        } catch (engineErr) {
+            console.error(`[RuleEngine] Processing error for ${sensorId}:`, engineErr.message);
+        }
 
         console.log(
             `[Simulator] ${payload.sensorId} | ` +

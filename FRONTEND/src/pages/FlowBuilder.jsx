@@ -19,6 +19,7 @@ import ConditionNode from "../nodes/ConditionNode";
 import AlertNode from "../nodes/AlertNode";
 
 import { validateGraph, isValidConnection } from "../utils/graphValidation";
+import { createRuleRequest } from "../services/api";
 
 const nodeTypes = {
   sensorNode: SensorNode,
@@ -360,7 +361,7 @@ function FlowCanvas({ ruleName, setRuleName, onOpenJsonModal }) {
   );
 
   // Save Rule & Generate Clean JSON Payload
-  const handleSaveRule = () => {
+  const handleSaveRule = async () => {
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
       showToast("error", validation.message);
@@ -420,10 +421,14 @@ function FlowCanvas({ ruleName, setRuleName, onOpenJsonModal }) {
         compiled: rulePayload
       };
       localStorage.setItem("nexusflow_rule_data", JSON.stringify(fullStorage));
-      showToast("success", "✅ Rule validated & saved to localStorage! Check console.");
+      
+      // Save rule to MongoDB backend API
+      await createRuleRequest(rulePayload);
+      showToast("success", "✅ Rule saved successfully to Backend Database & LocalStorage!");
     } catch (e) {
-      console.error("Storage error:", e);
-      showToast("error", "Error writing to localStorage.");
+      console.error("Save rule error:", e);
+      const errMsg = e.response?.data?.message || "Saved to LocalStorage (Backend offline or missing token)";
+      showToast("info", `✅ Saved locally. (${errMsg})`);
     }
   };
 
