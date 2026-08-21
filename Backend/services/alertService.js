@@ -167,7 +167,7 @@ async function markAlertAsRead(id) {
   return Alert.findByIdAndUpdate(
     id,
     { status: 'read' },
-    { new: true }
+    { returnDocument: 'after' }
   );
 }
 

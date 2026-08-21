@@ -40,8 +40,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(
-    async (email, password) => {
-      const response = await loginUser({ email, password });
+    async (email, password, role) => {
+      const payload = { email, password };
+      if (role && role !== "any") {
+        payload.role = role;
+      }
+      const response = await loginUser(payload);
       const receivedToken = response.data?.token;
 
       if (!receivedToken) {
@@ -61,8 +65,8 @@ export function AuthProvider({ children }) {
     [navigate, refreshProfile]
   );
 
-  const register = useCallback(async (name, email, password) => {
-    const response = await registerUser({ name, email, password });
+  const register = useCallback(async (name, email, password, role = "operator") => {
+    const response = await registerUser({ name, email, password, role });
     return response.data;
   }, []);
 
