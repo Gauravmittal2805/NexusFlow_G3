@@ -94,7 +94,7 @@ const registerUser = async (req, res) => {
 // @access  Public
 const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body || {};
+    const { email, password, role } = req.body || {};
 
     // Validate inputs
     if (!email) {
@@ -143,6 +143,14 @@ const loginUser = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Account is inactive'
+      });
+    }
+
+    // Optional role check if role was selected during login
+    if (role && role !== 'any' && user.role.toLowerCase() !== role.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        message: `Role mismatch: This account has '${user.role}' permissions, but '${role}' was selected.`
       });
     }
 

@@ -4,12 +4,23 @@ import { useAuth } from "../context/AuthContext";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const LOGIN_ROLES = [
+  { id: "any", label: "Auto-detect", icon: "🌐", desc: "Log in with account's assigned role" },
+  { id: "admin", label: "Admin", icon: "👑", desc: "Verify Admin permissions" },
+  { id: "operator", label: "Operator", icon: "⚡", desc: "Verify Operator permissions" },
+  { id: "viewer", label: "Viewer", icon: "👁️", desc: "Verify Viewer permissions" },
+];
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, sessionMessage, setSessionMessage } = useAuth();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({
+    email: location.state?.registeredEmail || "",
+    password: "",
+    role: location.state?.registeredRole || "any",
+  });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -20,6 +31,11 @@ export default function Login() {
     setErrors((current) => ({ ...current, [name]: "" }));
     setServerError("");
     setSessionMessage("");
+  };
+
+  const setRole = (role) => {
+    setForm((current) => ({ ...current, role }));
+    setServerError("");
   };
 
   const validate = () => {
@@ -47,7 +63,7 @@ export default function Login() {
 
     try {
       setSubmitting(true);
-      await login(form.email.trim(), form.password);
+      await login(form.email.trim(), form.password, form.role);
     } catch (error) {
       setServerError(
         error.response?.data?.message ||
@@ -139,6 +155,32 @@ export default function Login() {
             {errors.password && (
               <span className="field-error">{errors.password}</span>
             )}
+
+            <div className="role-selection-group">
+              <div className="role-label-row">
+                <label className="form-label">Role Privilege</label>
+                <span className="role-hint-pill">
+                  {LOGIN_ROLES.find((r) => r.id === form.role)?.desc || "Role Filter"}
+                </span>
+              </div>
+              <div className="login-role-tabs">
+                {LOGIN_ROLES.map((r) => {
+                  const isActive = form.role === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className={`login-role-tab ${isActive ? "active" : ""}`}
+                      onClick={() => setRole(r.id)}
+                      title={r.desc}
+                    >
+                      <span className="tab-icon">{r.icon}</span>
+                      <span>{r.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <button className="auth-submit" type="submit" disabled={submitting}>
               {submitting ? "Signing in..." : "Login"}

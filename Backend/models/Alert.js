@@ -22,8 +22,8 @@ const alertSchema = new mongoose.Schema({
   },
   severity: {
     type: String,
-    enum: ['HIGH', 'MEDIUM', 'LOW'],
     default: 'HIGH',
+    trim: true,
   },
   status: {
     type: String,
@@ -32,8 +32,8 @@ const alertSchema = new mongoose.Schema({
   },
   action: {
     type: String,
-    enum: ['SMS', 'EMAIL', 'NOTIFICATION'],
     default: 'NOTIFICATION',
+    trim: true,
   },
   timestamp: {
     type: Date,

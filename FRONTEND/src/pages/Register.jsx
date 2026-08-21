@@ -4,6 +4,27 @@ import { useAuth } from "../context/AuthContext";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const ROLES = [
+  {
+    id: "admin",
+    label: "Admin",
+    badge: "👑 Admin",
+    desc: "Full administrative access (Rules, Sensors, Analytics, Settings)",
+  },
+  {
+    id: "operator",
+    label: "Operator",
+    badge: "⚡ Operator",
+    desc: "Build rules, monitor sensors & control actions",
+  },
+  {
+    id: "viewer",
+    label: "Viewer",
+    badge: "👁️ Viewer",
+    desc: "Read-only access to live dashboards & alerts",
+  },
+];
+
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -12,6 +33,7 @@ export default function Register() {
     name: "",
     email: "",
     password: "",
+    role: "operator",
   });
 
   const [errors, setErrors] = useState({});
@@ -23,6 +45,10 @@ export default function Register() {
     setForm((current) => ({ ...current, [name]: value }));
     setErrors((current) => ({ ...current, [name]: "" }));
     setServerError("");
+  };
+
+  const setRole = (role) => {
+    setForm((current) => ({ ...current, role }));
   };
 
   const validate = () => {
@@ -40,6 +66,12 @@ export default function Register() {
 
     if (!form.password) {
       nextErrors.password = "Password is required.";
+    } else if (form.password.length < 6) {
+      nextErrors.password = "Password must be at least 6 characters.";
+    }
+
+    if (!form.role) {
+      nextErrors.role = "Please select a role.";
     }
 
     setErrors(nextErrors);
@@ -58,12 +90,13 @@ export default function Register() {
       await register(
         form.name.trim(),
         form.email.trim(),
-        form.password
+        form.password,
+        form.role
       );
 
       navigate("/login", {
         replace: true,
-        state: { registered: true },
+        state: { registered: true, registeredEmail: form.email.trim(), registeredRole: form.role },
       });
     } catch (error) {
       setServerError(
@@ -148,7 +181,7 @@ export default function Register() {
               className={`auth-input ${errors.password ? "input-error" : ""}`}
               type="password"
               name="password"
-              placeholder="Create a password"
+              placeholder="Create a password (min 6 characters)"
               value={form.password}
               onChange={updateField}
               autoComplete="new-password"
@@ -156,6 +189,32 @@ export default function Register() {
             {errors.password && (
               <span className="field-error">{errors.password}</span>
             )}
+
+            <div className="role-selection-group">
+              <label className="form-label">Select Workspace Role</label>
+              <div className="role-options-grid">
+                {ROLES.map((r) => {
+                  const isSelected = form.role === r.id;
+                  return (
+                    <div
+                      key={r.id}
+                      className={`role-option-card ${isSelected ? "selected" : ""}`}
+                      onClick={() => setRole(r.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setRole(r.id)}
+                    >
+                      <div className="role-option-header">
+                        <span className="role-badge">{r.badge}</span>
+                        <span className={`role-radio-dot ${isSelected ? "checked" : ""}`} />
+                      </div>
+                      <span className="role-option-desc">{r.desc}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {errors.role && <span className="field-error">{errors.role}</span>}
+            </div>
 
             <button className="auth-submit" type="submit" disabled={submitting}>
               {submitting ? "Creating account..." : "Register"}

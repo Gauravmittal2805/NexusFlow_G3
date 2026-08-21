@@ -86,9 +86,21 @@ const evaluateRule = (rule, telemetry) => {
 
   // Step 7 & 8: Evaluate condition node(s) via Condition Evaluator
   let overallMatch = true;
+  const fallbackField =
+    matchingSensorNode.data?.field ||
+    matchingSensorNode.data?.sensor ||
+    matchingSensorNode.data?.metric ||
+    'temperature';
 
   for (const conditionNode of conditionNodes) {
-    const isSatisfied = evaluateCondition(conditionNode, telemetry);
+    const enrichedCondition = {
+      ...conditionNode,
+      data: {
+        field: conditionNode.data?.field || fallbackField,
+        ...conditionNode.data,
+      },
+    };
+    const isSatisfied = evaluateCondition(enrichedCondition, telemetry);
     if (!isSatisfied) {
       overallMatch = false;
       break;
