@@ -76,11 +76,13 @@ const createRule = async (req, res) => {
   }
 };
 
-// @desc    Get all rules for the authenticated user (GET /api/rules)
+// @desc    Get all rules — admin sees all, others see their own (GET /api/rules)
 // @access  Private
 const getRules = async (req, res) => {
   try {
-    const rules = await Rule.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
+    // Admins can see all rules; operator/viewer see only their own
+    const filter = req.user.role === 'admin' ? {} : { createdBy: req.user.id };
+    const rules = await Rule.find(filter).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
