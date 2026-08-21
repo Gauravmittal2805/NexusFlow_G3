@@ -7,6 +7,8 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/profile', protect, getProfile);
 router.put('/profile', protect, updateProfile);
+router.patch('/profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
+router.patch('/change-password', protect, changePassword);
 
 module.exports = router;

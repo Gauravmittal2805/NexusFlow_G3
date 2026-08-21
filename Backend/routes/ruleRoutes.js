@@ -10,40 +10,31 @@ const {
   toggleRuleStatus,
 } = require('../controllers/ruleController');
 const { protect } = require('../middleware/authMiddleware');
-const authorize = require('../middleware/authorize');
+const { requireRole } = require('../middleware/roleMiddleware');
 
 // All rule routes are protected
 router.use(protect);
 
 // POST /api/rules - Create rule (admin, operator)
-router.post('/', authorize('admin', 'operator'), createRule);
+router.post('/', requireRole('admin', 'operator'), createRule);
 
-// GET /api/rules - Get all rules for current user (admin, operator, viewer)
-router.get('/', authorize('admin', 'operator', 'viewer'), getRules);
+// GET /api/rules - Get all rules (admin, operator, viewer)
+router.get('/', requireRole('admin', 'operator', 'viewer'), getRules);
 
 // GET /api/rules/:id - Get single rule by ID (admin, operator, viewer)
-router.get('/:id', authorize('admin', 'operator', 'viewer'), getRuleById);
+router.get('/:id', requireRole('admin', 'operator', 'viewer'), getRuleById);
 
 // PATCH /api/rules/:id/toggle - Toggle rule active status (admin, operator)
-router.patch('/:id/toggle', authorize('admin', 'operator'), toggleRuleStatus);
+// NOTE: must be declared before /:id/status to avoid Express route ambiguity
+router.patch('/:id/toggle', requireRole('admin', 'operator'), toggleRuleStatus);
 
-// DELETE /api/rules/:id - Delete rule (admin)
-router.delete('/:id', authorize('admin'), async (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Rule deleted successfully (auth verified)'
-  });
-});
-// PUT /api/rules/:id - Update rule (Step 1)
-router.put('/:id', updateRule);
+// PATCH /api/rules/:id/status - Update rule active status (admin, operator)
+router.patch('/:id/status', requireRole('admin', 'operator'), updateRuleStatus);
 
-// DELETE /api/rules/:id - Delete rule (Step 2)
-router.delete('/:id', deleteRule);
+// PUT /api/rules/:id - Update rule (admin, operator)
+router.put('/:id', requireRole('admin', 'operator'), updateRule);
 
-// PATCH /api/rules/:id/status - Update rule active status (Step 3)
-router.patch('/:id/status', updateRuleStatus);
-
-// PATCH /api/rules/:id/toggle - Toggle rule active status
-router.patch('/:id/toggle', toggleRuleStatus);
+// DELETE /api/rules/:id - Delete rule (admin only)
+router.delete('/:id', requireRole('admin'), deleteRule);
 
 module.exports = router;

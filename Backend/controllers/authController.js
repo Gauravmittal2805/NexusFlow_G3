@@ -227,12 +227,12 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    const { name, email, password } = req.body || {};
+    const { name, email, password, role, status } = req.body || {};
 
-    if (email !== undefined || password !== undefined) {
+    if (email !== undefined || password !== undefined || role !== undefined || status !== undefined) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password cannot be updated through this endpoint'
+        message: 'Only profile fields like name can be updated through this endpoint'
       });
     }
 
@@ -261,8 +261,8 @@ const updateProfile = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        role: user.role,
+        status: user.status
       }
     });
   } catch (error) {
@@ -284,17 +284,17 @@ const changePassword = async (req, res) => {
 
     const { currentPassword, newPassword } = req.body || {};
 
-    if (!currentPassword) {
+    if (!currentPassword || typeof currentPassword !== 'string' || currentPassword.trim() === '') {
       return res.status(400).json({
         success: false,
         message: 'Current password is required'
       });
     }
 
-    if (!newPassword) {
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.trim() === '') {
       return res.status(400).json({
         success: false,
-        message: 'New password is required'
+        message: 'New password is required and cannot be empty'
       });
     }
 
