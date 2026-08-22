@@ -32,4 +32,12 @@ export const subscribeToTelemetry = (callback) => {
   };
 };
 
+export const subscribeToRuleTrigger = (callback) => {
+  socket.on("rule:triggered", callback);
+
+  return () => {
+    socket.off("rule:triggered", callback);
+  };
+};
+
 export default socket;
