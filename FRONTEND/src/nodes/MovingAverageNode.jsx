@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Handle, Position } from "@xyflow/react";
 
 const OPERATION_MAP = {
@@ -11,70 +11,52 @@ const OPERATION_MAP = {
 export default function MovingAverageNode({ id, data, selected }) {
   const currentOpKey = data.operation || "movingAverage";
   const config = OPERATION_MAP[currentOpKey] || OPERATION_MAP.movingAverage;
-
-  const handleOpTypeChange = (e) => {
-    const newOpKey = e.target.value;
-    const newConfig = OPERATION_MAP[newOpKey] || OPERATION_MAP.movingAverage;
-
-    if (data.onOpChange) {
-      data.onOpChange(id, newOpKey, newConfig);
-    } else if (data.onChange) {
-      data.onChange(id, "operation", newOpKey);
-    }
-  };
-
-  const handleWindowChange = (e) => {
-    if (data.onChange) {
-      data.onChange(id, "window", Number(e.target.value));
-    }
-  };
+  const windowSize = data.window ?? config.defaultWindow;
 
   return (
     <div className={`flow-custom-node processing-node ${selected ? "is-selected" : ""}`}>
       <Handle type="target" position={Position.Top} className="flow-handle handle-top" />
 
       <div className="node-header">
-        <span className="node-icon">{data.icon || config.icon}</span>
-        <span className="node-title">{data.label || config.label}</span>
-        {data.onDuplicate && (
-          <button
-            className="node-action-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onDuplicate(id);
-            }}
-            title="Duplicate Node"
-          >
-            📋
-          </button>
-        )}
+        <div className="node-header-left">
+          <span className="node-icon">{data.icon || config.icon}</span>
+          <div>
+            <span className="node-category-tag">OPERATION</span>
+            <span className="node-title">{data.label || config.label}</span>
+          </div>
+        </div>
+        <div className="node-header-actions" onMouseDown={(e) => e.stopPropagation()}>
+          {data.onDuplicate && (
+            <button
+              className="node-mini-btn"
+              onClick={() => data.onDuplicate(id)}
+              title="Duplicate Node"
+            >
+              📋
+            </button>
+          )}
+          {data.onDelete && (
+            <button
+              className="node-mini-btn delete"
+              onClick={() => data.onDelete(id)}
+              title="Delete Node"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="node-content" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="node-field">
-          <label className="field-label">Operation:</label>
-          <select
-            className="node-input-select"
-            value={currentOpKey}
-            onChange={handleOpTypeChange}
-          >
-            <option value="movingAverage">Moving Avg (📈)</option>
-            <option value="average">Average (📊)</option>
-            <option value="minimum">Minimum (⬇️)</option>
-            <option value="maximum">Maximum (⬆️)</option>
-          </select>
+      <div className="node-content">
+        <div className="node-summary-row">
+          <span className="summary-label">Window:</span>
+          <span className="summary-value window-badge">
+            {windowSize} samples
+          </span>
         </div>
-
-        <div className="node-field">
-          <label className="field-label">Window Size:</label>
-          <input
-            type="number"
-            min="1"
-            max="100"
-            className="node-input-number"
-            value={data.window ?? config.defaultWindow}
-            onChange={handleWindowChange}
-          />
+        <div className="node-summary-row">
+          <span className="summary-label">Type:</span>
+          <span className="summary-id-pill">{config.label}</span>
         </div>
       </div>
 

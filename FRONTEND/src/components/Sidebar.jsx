@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import { useAlerts } from "../context/AlertContext";
 import { hasPermission } from "./RoleBasedAccess";
 
 const items = [
@@ -15,6 +16,7 @@ const items = [
 export default function Sidebar() {
   const { user } = useAuth();
   const { connected } = useTelemetry();
+  const { unreadCount } = useAlerts();
 
   const visibleItems = items.filter((item) =>
     hasPermission(user?.role, item.permission)
@@ -43,6 +45,9 @@ export default function Sidebar() {
           >
             <span className="nav-icon">{item.icon}</span>
             <span>{item.label}</span>
+            {item.path === "/alerts" && unreadCount > 0 && (
+              <span className="sidebar-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+            )}
           </NavLink>
         ))}
       </nav>

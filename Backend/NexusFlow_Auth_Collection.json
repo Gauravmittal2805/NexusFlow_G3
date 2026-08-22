@@ -1,0 +1,626 @@
+﻿{
+  "info": {
+    "name": "NexusFlow Auth & Authorization",
+    "_postman_id": "nexusflow-auth-v1",
+    "description": "Complete auth flow: Register -> Login -> JWT -> Profile -> Protected API -> Role API -> Change Password",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5000", "type": "string" },
+    { "key": "jwt_token", "value": "", "type": "string" },
+    { "key": "admin_token", "value": "", "type": "string" },
+    { "key": "operator_token", "value": "", "type": "string" },
+    { "key": "viewer_token", "value": "", "type": "string" },
+    { "key": "rule_id", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/health",
+            "description": "Expected: 200 { success: true, message: 'NexusFlow Backend is running' }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Register",
+      "item": [
+        {
+          "name": "Register - Admin User",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@nexusflow.com\",\n  \"password\": \"Admin@123\",\n  \"role\": \"admin\"\n}" },
+            "description": "Expected: 201 { success: true, message: 'User registered successfully' }"
+          }
+        },
+        {
+          "name": "Register - Operator User",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Operator User\",\n  \"email\": \"operator@nexusflow.com\",\n  \"password\": \"Operator@123\",\n  \"role\": \"operator\"\n}" },
+            "description": "Expected: 201"
+          }
+        },
+        {
+          "name": "Register - Viewer User",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Viewer User\",\n  \"email\": \"viewer@nexusflow.com\",\n  \"password\": \"Viewer@123\",\n  \"role\": \"viewer\"\n}" },
+            "description": "Expected: 201"
+          }
+        },
+        {
+          "name": "Register - Missing Name [FAIL 400]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"test@nexusflow.com\",\n  \"password\": \"Test@123\"\n}" },
+            "description": "Expected: 400 { success: false, message: 'Missing name' }"
+          }
+        },
+        {
+          "name": "Register - Invalid Email [FAIL 400]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test\",\n  \"email\": \"not-an-email\",\n  \"password\": \"Test@123\"\n}" },
+            "description": "Expected: 400 { success: false, message: 'Invalid email' }"
+          }
+        },
+        {
+          "name": "Register - Duplicate Email [FAIL 409]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin Again\",\n  \"email\": \"admin@nexusflow.com\",\n  \"password\": \"Admin@123\",\n  \"role\": \"admin\"\n}" },
+            "description": "Expected: 409 Duplicate email"
+          }
+        },
+        {
+          "name": "Register - Invalid Role [FAIL 400]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test\",\n  \"email\": \"test2@nexusflow.com\",\n  \"password\": \"Test@123\",\n  \"role\": \"superadmin\"\n}" },
+            "description": "Expected: 400 Invalid role"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Login",
+      "item": [
+        {
+          "name": "Login - Admin (auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var j = pm.response.json();",
+                  "    pm.collectionVariables.set('admin_token', j.token);",
+                  "    pm.collectionVariables.set('jwt_token', j.token);",
+                  "    pm.collectionVariables.set('user_id', j.user.id);",
+                  "    console.log('Admin token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@nexusflow.com\",\n  \"password\": \"Admin@123\"\n}" },
+            "description": "Expected: 200 { success:true, message:'Login successful', token:'...', user:{id,name,email,role,status} }"
+          }
+        },
+        {
+          "name": "Login - Operator (auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('operator_token', pm.response.json().token);",
+                  "    console.log('Operator token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"operator@nexusflow.com\",\n  \"password\": \"Operator@123\"\n}" },
+            "description": "Expected: 200"
+          }
+        },
+        {
+          "name": "Login - Viewer (auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('viewer_token', pm.response.json().token);",
+                  "    console.log('Viewer token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"viewer@nexusflow.com\",\n  \"password\": \"Viewer@123\"\n}" },
+            "description": "Expected: 200"
+          }
+        },
+        {
+          "name": "Login - Wrong Password [FAIL 401]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@nexusflow.com\",\n  \"password\": \"wrongpassword\"\n}" },
+            "description": "Expected: 401 Wrong password"
+          }
+        },
+        {
+          "name": "Login - User Not Found [FAIL 404]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nobody@nexusflow.com\",\n  \"password\": \"Test@123\"\n}" },
+            "description": "Expected: 404 User not found"
+          }
+        },
+        {
+          "name": "Login - Missing Email [FAIL 400]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"Admin@123\"\n}" },
+            "description": "Expected: 400 Missing email"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. JWT Scenarios",
+      "item": [
+        {
+          "name": "Missing JWT - No Header [FAIL 401]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/profile",
+            "description": "No Authorization header. Expected: 401 { message: 'No token provided' }"
+          }
+        },
+        {
+          "name": "Invalid JWT - Bad Token [FAIL 401]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [{ "key": "Authorization", "value": "Bearer this.is.not.valid.jwt" }],
+            "description": "Expected: 401 { message: 'Invalid token' }"
+          }
+        },
+        {
+          "name": "Expired JWT [FAIL 401]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [{ "key": "Authorization", "value": "Bearer PASTE_AN_EXPIRED_TOKEN_HERE" }],
+            "description": "Use a genuinely expired JWT. Expected: 401 { message: 'Token expired' }"
+          }
+        },
+        {
+          "name": "Malformed Bearer - Empty Token [FAIL 401]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [{ "key": "Authorization", "value": "Bearer " }],
+            "description": "Expected: 401 { message: 'No token provided' }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Profile",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "description": "Expected: 200 { success:true, user:{id,name,email,role,status} }"
+          }
+        },
+        {
+          "name": "Update Profile - Name Only",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin Updated Name\"\n}" },
+            "description": "Expected: 200 Profile updated successfully"
+          }
+        },
+        {
+          "name": "Update Profile - Try Change Email [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Name\",\n  \"email\": \"hack@nexusflow.com\"\n}" },
+            "description": "Expected: 400 Only profile fields like name can be updated"
+          }
+        },
+        {
+          "name": "Update Profile - Try Escalate Role [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/profile",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Hacker\",\n  \"role\": \"admin\"\n}" },
+            "description": "Expected: 400"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Change Password",
+      "item": [
+        {
+          "name": "Change Password - Valid",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/change-password",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{viewer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Viewer@123\",\n  \"newPassword\": \"Viewer@456\"\n}" },
+            "description": "Expected: 200 Password changed successfully"
+          }
+        },
+        {
+          "name": "Change Password - Wrong Current [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/change-password",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"wrongpassword\",\n  \"newPassword\": \"NewPass@123\"\n}" },
+            "description": "Expected: 400 Incorrect current password"
+          }
+        },
+        {
+          "name": "Change Password - Same as Current [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/change-password",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Admin@123\",\n  \"newPassword\": \"Admin@123\"\n}" },
+            "description": "Expected: 400 New password must be different"
+          }
+        },
+        {
+          "name": "Change Password - Too Short [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/change-password",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Admin@123\",\n  \"newPassword\": \"abc\"\n}" },
+            "description": "Expected: 400 at least 6 characters"
+          }
+        },
+        {
+          "name": "Change Password - Missing JWT [FAIL 401]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/change-password",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Admin@123\",\n  \"newPassword\": \"NewPass@123\"\n}" },
+            "description": "Expected: 401 No token provided"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Rules API",
+      "item": [
+        {
+          "name": "Create Rule - Admin (auto-saves rule_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('rule_id', pm.response.json().rule._id);",
+                  "    console.log('Rule ID saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/rules",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Temperature Alert Rule\",\n  \"description\": \"Trigger alert when temperature exceeds threshold\",\n  \"nodes\": [\n    { \"id\": \"node-1\", \"type\": \"trigger\", \"data\": { \"label\": \"Sensor Input\" } },\n    { \"id\": \"node-2\", \"type\": \"condition\", \"data\": { \"label\": \"Temp > 80\" } },\n    { \"id\": \"node-3\", \"type\": \"action\", \"data\": { \"label\": \"Send Alert\" } }\n  ],\n  \"edges\": [\n    { \"id\": \"e1\", \"source\": \"node-1\", \"target\": \"node-2\" },\n    { \"id\": \"e2\", \"source\": \"node-2\", \"target\": \"node-3\" }\n  ],\n  \"isActive\": true\n}" },
+            "description": "Expected: 201 Rule created successfully. rule_id auto-saved."
+          }
+        },
+        {
+          "name": "Create Rule - Viewer [FAIL 403]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/rules",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{viewer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Bad Rule\",\n  \"nodes\": [{ \"id\": \"n1\", \"type\": \"trigger\" }],\n  \"edges\": []\n}" },
+            "description": "Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Get All Rules - Admin (sees ALL rules)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rules",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "description": "Admin sees all rules system-wide. Expected: 200"
+          }
+        },
+        {
+          "name": "Get All Rules - Operator (own only)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rules",
+            "header": [{ "key": "Authorization", "value": "Bearer {{operator_token}}" }],
+            "description": "Operator sees only their own rules. Expected: 200"
+          }
+        },
+        {
+          "name": "Get All Rules - Viewer (own only)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rules",
+            "header": [{ "key": "Authorization", "value": "Bearer {{viewer_token}}" }],
+            "description": "Viewer sees only their own rules. Expected: 200"
+          }
+        },
+        {
+          "name": "Get All Rules - No JWT [FAIL 401]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rules",
+            "description": "Expected: 401 No token provided"
+          }
+        },
+        {
+          "name": "Get Rule By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rules/{{rule_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "description": "Expected: 200 { success:true, rule:{...} }"
+          }
+        },
+        {
+          "name": "Update Rule - Admin",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/rules/{{rule_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Temperature Alert Rule\",\n  \"description\": \"Updated description\"\n}" },
+            "description": "Expected: 200 Rule updated successfully"
+          }
+        },
+        {
+          "name": "Update Rule - Viewer [FAIL 403]",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/rules/{{rule_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{viewer_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Unauthorized Update\"\n}" },
+            "description": "Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Toggle Rule Status - Admin",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/rules/{{rule_id}}/toggle",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "description": "Expected: 200 Rule status updated"
+          }
+        },
+        {
+          "name": "Set Rule Status Explicit - Admin",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/rules/{{rule_id}}/status",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": true\n}" },
+            "description": "Expected: 200 Rule enabled successfully"
+          }
+        },
+        {
+          "name": "Delete Rule - Operator [FAIL 403]",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/rules/{{rule_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{operator_token}}" }],
+            "description": "Only admin can delete. Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Delete Rule - Admin",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/rules/{{rule_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "description": "Expected: 200 Rule deleted successfully"
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. User Management (Admin Only)",
+      "item": [
+        {
+          "name": "Get All Users - Admin",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/users",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "description": "Expected: 200 { success:true, users:[...] }"
+          }
+        },
+        {
+          "name": "Get All Users - Operator [FAIL 403]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/users",
+            "header": [{ "key": "Authorization", "value": "Bearer {{operator_token}}" }],
+            "description": "Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Get All Users - Viewer [FAIL 403]",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/users",
+            "header": [{ "key": "Authorization", "value": "Bearer {{viewer_token}}" }],
+            "description": "Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Update User Role - Admin promotes viewer to operator",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/users/{{user_id}}/role",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"operator\"\n}" },
+            "description": "Paste a real user ObjectId from Get All Users into user_id variable. Expected: 200"
+          }
+        },
+        {
+          "name": "Update User Role - Invalid Role [FAIL 400]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/users/{{user_id}}/role",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"superadmin\"\n}" },
+            "description": "Expected: 400 Invalid role"
+          }
+        },
+        {
+          "name": "Update User Role - Operator attempts [FAIL 403]",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/users/{{user_id}}/role",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"admin\"\n}" },
+            "description": "Expected: 403 Access denied"
+          }
+        },
+        {
+          "name": "Update User Status - Deactivate",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/users/{{user_id}}/status",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"inactive\"\n}" },
+            "description": "Expected: 200 User status updated to inactive"
+          }
+        },
+        {
+          "name": "Login with Inactive Account [FAIL 403]",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"viewer@nexusflow.com\",\n  \"password\": \"Viewer@123\"\n}" },
+            "description": "After deactivating viewer above. Expected: 403 Account is inactive"
+          }
+        }
+      ]
+    }
+  ]
+}

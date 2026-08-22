@@ -1,8 +1,9 @@
-import React from "react";
+﻿import React from "react";
 
 const NODE_CATEGORIES = [
   {
     title: "DATA SOURCES",
+    badge: "Input",
     items: [
       {
         id: "temp",
@@ -10,15 +11,8 @@ const NODE_CATEGORIES = [
         label: "Temperature",
         icon: "🌡️",
         sensor: "temperature",
-        sensorId: "T-001"
-      },
-      {
-        id: "humidity",
-        nodeType: "sensorNode",
-        label: "Humidity",
-        icon: "💧",
-        sensor: "humidity",
-        sensorId: "H-002"
+        sensorId: "T-001",
+        unit: "°C"
       },
       {
         id: "pressure",
@@ -26,7 +20,17 @@ const NODE_CATEGORIES = [
         label: "Pressure",
         icon: "⏲️",
         sensor: "pressure",
-        sensorId: "P-003"
+        sensorId: "P-003",
+        unit: "PSI"
+      },
+      {
+        id: "humidity",
+        nodeType: "sensorNode",
+        label: "Humidity",
+        icon: "💧",
+        sensor: "humidity",
+        sensorId: "H-002",
+        unit: "%"
       },
       {
         id: "rpm",
@@ -34,45 +38,52 @@ const NODE_CATEGORIES = [
         label: "RPM",
         icon: "🔄",
         sensor: "rpm",
-        sensorId: "R-004"
+        sensorId: "R-004",
+        unit: "RPM"
       }
     ]
   },
   {
-    title: "PROCESSING",
+    title: "OPERATIONS",
+    badge: "Process",
     items: [
       {
         id: "mavg",
-        nodeType: "processingNode",
-        label: "Moving Average",
+        nodeType: "movingAverageNode",
+        label: "Moving Avg",
         icon: "📈",
+        operation: "movingAverage",
         window: 5
       },
       {
         id: "avg",
-        nodeType: "processingNode",
+        nodeType: "movingAverageNode",
         label: "Average",
         icon: "📊",
+        operation: "average",
         window: 10
       },
       {
         id: "min",
-        nodeType: "processingNode",
-        label: "Minimum Window",
+        nodeType: "movingAverageNode",
+        label: "Minimum",
         icon: "⬇️",
+        operation: "minimum",
         window: 5
       },
       {
         id: "max",
-        nodeType: "processingNode",
-        label: "Maximum Window",
+        nodeType: "movingAverageNode",
+        label: "Maximum",
         icon: "⬆️",
+        operation: "maximum",
         window: 5
       }
     ]
   },
   {
     title: "CONDITIONS",
+    badge: "Evaluate",
     items: [
       {
         id: "gt",
@@ -91,6 +102,14 @@ const NODE_CATEGORIES = [
         value: 20
       },
       {
+        id: "gte",
+        nodeType: "conditionNode",
+        label: "Greater Equal",
+        icon: ">=",
+        operator: ">=",
+        value: 90
+      },
+      {
         id: "eq",
         nodeType: "conditionNode",
         label: "Equals",
@@ -102,6 +121,7 @@ const NODE_CATEGORIES = [
   },
   {
     title: "ACTIONS",
+    badge: "Output",
     items: [
       {
         id: "sms",
@@ -142,14 +162,22 @@ export default function NodePanel() {
   return (
     <aside className="node-library-panel">
       <div className="panel-header">
-        <h3>Node Library</h3>
-        <p className="panel-subtitle">Drag & drop nodes into canvas</p>
+        <div className="panel-header-icon">🧩</div>
+        <div>
+          <h3>Node Library</h3>
+          <p className="panel-subtitle">Drag & drop onto canvas</p>
+        </div>
       </div>
 
       <div className="node-categories">
         {NODE_CATEGORIES.map((category) => (
           <div key={category.title} className="category-section">
-            <h4 className="category-title">{category.title}</h4>
+            <div className="category-header-row">
+              <h4 className="category-title">{category.title}</h4>
+              <span className={`category-badge ${category.badge.toLowerCase()}`}>
+                {category.badge}
+              </span>
+            </div>
             <div className="category-items">
               {category.items.map((item) => (
                 <div
@@ -157,9 +185,11 @@ export default function NodePanel() {
                   className="draggable-node-item"
                   onDragStart={(event) => onDragStart(event, item)}
                   draggable
+                  title={`Drag ${item.label} to canvas`}
                 >
                   <span className="item-icon">{item.icon}</span>
                   <span className="item-label">{item.label}</span>
+                  <span className="drag-handle-dots">⋮⋮</span>
                 </div>
               ))}
             </div>

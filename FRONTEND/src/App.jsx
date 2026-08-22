@@ -5,6 +5,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import FlowBuilder from "./pages/FlowBuilder";
+import Sensors from "./pages/Sensors";
+import Alerts from "./pages/Alerts";
 
 const Placeholder = ({ title }) => (
   <div className="placeholder-page">
@@ -26,9 +28,9 @@ export default function App() {
         <Route element={<DashboardLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="sensors" element={<Placeholder title="Sensors" />} />
+          <Route path="sensors" element={<Sensors />} />
           <Route path="flow" element={<FlowBuilder />} />
-          <Route path="alerts" element={<Placeholder title="Alerts" />} />
+          <Route path="alerts" element={<Alerts />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />
           <Route path="settings" element={<Placeholder title="Settings" />} />
         </Route>
