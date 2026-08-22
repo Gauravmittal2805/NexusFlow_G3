@@ -14,6 +14,7 @@ import {
   socket,
   subscribeToTelemetry,
   subscribeToRuleTrigger,
+  subscribeToAlertNew,
 } from "../services/socket";
 
 const TelemetryContext = createContext(null);
@@ -60,6 +61,13 @@ export function TelemetryProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const isFirstConnection = useRef(true);
 
+  // Step 4: Live alerts received via alert:new Socket.IO event
+  const [liveAlerts, setLiveAlerts] = useState([]);
+
+  const clearLiveAlerts = useCallback(() => {
+    setLiveAlerts([]);
+  }, []);
+
   const dismissNotification = useCallback((id) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
@@ -85,6 +93,50 @@ export function TelemetryProvider({ children }) {
       }
     },
     [dismissNotification]
+  );
+
+  /*
+   * Step 4: Handles alert:new Socket.IO events emitted by alertService.js
+   * after a rule trigger persists a new Alert document to MongoDB.
+   *
+   * Socket.IO
+   *      ↓
+   * alert:new
+   *      ↓
+   * handleAlertNew()
+   */
+  const handleAlertNew = useCallback(
+    (alertDoc) => {
+      if (!alertDoc) return;
+
+      console.log("🔔 alert:new received:", alertDoc);
+
+      const alertId = alertDoc._id || alertDoc.id || `alert-${Date.now()}`;
+      const ruleName = alertDoc.ruleName || "Rule";
+      const sensorId = alertDoc.sensorId || "";
+
+      // Prepend to liveAlerts — Alerts.jsx will merge these in real-time
+      setLiveAlerts((prev) => {
+        // Avoid duplicates if the same alert arrives more than once
+        const alreadyExists = prev.some(
+          (a) => (a._id || a.id) === alertId
+        );
+        if (alreadyExists) return prev;
+        return [{ ...alertDoc, _id: alertId, isRead: false }, ...prev];
+      });
+
+      // Also push a toast so user sees the new alert regardless of which page they're on
+      addNotification({
+        type: "alert_new",
+        ruleId: alertDoc.ruleId,
+        alertId,
+        title: `🔴 New Alert: ${ruleName}`,
+        message: sensorId ? `Sensor: ${sensorId}` : alertDoc.message || "",
+        timestamp: alertDoc.timestamp,
+        duration: 7000,
+      });
+    },
+    [addNotification]
   );
 
   /*
@@ -271,9 +323,14 @@ export function TelemetryProvider({ children }) {
     const unsubscribeRuleTrigger =
       subscribeToRuleTrigger(handleRuleTriggered);
 
+    // Step 4: Listen for alert:new — emitted by alertService after alert persisted
+    const unsubscribeAlertNew =
+      subscribeToAlertNew(handleAlertNew);
+
     return () => {
       unsubscribeTelemetry();
       unsubscribeRuleTrigger();
+      unsubscribeAlertNew();
 
       socket.off("connect", handleConnect);
 
@@ -286,7 +343,7 @@ export function TelemetryProvider({ children }) {
 
       disconnectSocket();
     };
-  }, [updateTelemetry, handleRuleTriggered, addNotification]);
+  }, [updateTelemetry, handleRuleTriggered, handleAlertNew, addNotification]);
 
   /*
    * Currently selected sensor
@@ -400,6 +457,11 @@ export function TelemetryProvider({ children }) {
       addNotification,
 
       dismissNotification,
+
+      // Step 4: live alerts from alert:new Socket.IO event
+      liveAlerts,
+
+      clearLiveAlerts,
     }),
     [
       sensors,
@@ -414,6 +476,8 @@ export function TelemetryProvider({ children }) {
       notifications,
       addNotification,
       dismissNotification,
+      liveAlerts,
+      clearLiveAlerts,
     ]
   );
 

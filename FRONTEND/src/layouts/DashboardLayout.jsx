@@ -34,13 +34,30 @@ export default function DashboardLayout() {
               </div>
 
               <div className="toast-actions">
-                {/* Step 7: View Alert link only for rule_trigger notifications */}
+                {/* Step 7: View Alert link for rule_trigger notifications */}
                 {notif.type === "rule_trigger" && notif.ruleId && (
                   <button
                     type="button"
                     className="toast-action-btn"
                     onClick={() => {
                       navigate(`/alerts?ruleId=${notif.ruleId}`);
+                      dismissNotification(notif.id);
+                    }}
+                  >
+                    View Alert
+                  </button>
+                )}
+
+                {/* Step 4: View Alert link for alert_new notifications */}
+                {notif.type === "alert_new" && (notif.ruleId || notif.alertId) && (
+                  <button
+                    type="button"
+                    className="toast-action-btn toast-action-btn--red"
+                    onClick={() => {
+                      const dest = notif.ruleId
+                        ? `/alerts?ruleId=${notif.ruleId}`
+                        : `/alerts`;
+                      navigate(dest);
                       dismissNotification(notif.id);
                     }}
                   >
