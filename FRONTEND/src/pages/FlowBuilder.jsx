@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -24,7 +24,8 @@ import AlertNode from "../nodes/AlertNode";
 
 import { validateGraph, validateConnectionWithReason } from "../utils/graphValidation";
 import { serializeGraph, deserializeGraph } from "../utils/graphSerializer";
-import { createRuleRequest } from "../services/api";
+import { createRuleRequest, getRuleByIdRequest } from "../services/api";
+import { useSearchParams } from "react-router-dom";
 
 const nodeTypes = {
   sensorNode: SensorNode,
@@ -365,6 +366,52 @@ function FlowCanvas({
     showToast("info", `Loaded rule: "${deserialized.ruleName}"`);
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
   };
+
+  // Step 9: Automatic rule loading when navigating from Alert Details (e.g. /flow?ruleId=xyz)
+  const [searchParams] = useSearchParams();
+  const urlRuleId = searchParams.get("ruleId");
+
+  useEffect(() => {
+    if (!urlRuleId) return;
+
+    let isMounted = true;
+    const loadRuleFromParam = async () => {
+      // 1. Check localStorage first
+      try {
+        const storedRulesRaw = localStorage.getItem("nexusflow_rules");
+        if (storedRulesRaw) {
+          const storedRules = JSON.parse(storedRulesRaw);
+          const matched = storedRules.find(
+            (r) =>
+              (r.id && r.id.toString() === urlRuleId) ||
+              (r._id && r._id.toString() === urlRuleId)
+          );
+          if (matched && isMounted) {
+            handleLoadSavedRule(matched);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load rule from localStorage:", err);
+      }
+
+      // 2. Fetch from backend API
+      try {
+        const res = await getRuleByIdRequest(urlRuleId);
+        const fetchedRule = res?.data?.rule || res?.data;
+        if (fetchedRule && isMounted) {
+          handleLoadSavedRule(fetchedRule);
+        }
+      } catch (apiErr) {
+        console.warn("Could not load rule from backend API:", apiErr.message);
+      }
+    };
+
+    loadRuleFromParam();
+    return () => {
+      isMounted = false;
+    };
+  }, [urlRuleId]);
 
   // Step 11: Delete a saved rule from localStorage
   const handleDeleteSavedRule = (ruleId) => {
