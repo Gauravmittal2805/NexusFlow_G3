@@ -28,10 +28,10 @@ export default function Alerts() {
     unreadCount,
     loading,
     error,
-    toast,
-    dismissToast,
     refreshAlerts,
     markAsRead,
+    selectedAlertId,
+    setSelectedAlertId,
   } = useAlerts();
 
   const [selectedAlert, setSelectedAlert] = useState(null);
@@ -39,6 +39,20 @@ export default function Alerts() {
   const [severityFilter, setSeverityFilter] = useState("All");
   const [statusFilter, setStatusFilter]   = useState("All");
   const [sensorFilter, setSensorFilter]   = useState("All");
+
+  // Auto-select alert if selectedAlertId is set in context
+  React.useEffect(() => {
+    if (selectedAlertId && alerts.length > 0) {
+      const match = alerts.find(
+        (a) => (a._id || a.id || "").toString() === selectedAlertId.toString()
+      );
+      if (match) {
+        setSelectedAlert(match);
+        // Clear selectedAlertId once consumed
+        if (setSelectedAlertId) setSelectedAlertId(null);
+      }
+    }
+  }, [selectedAlertId, alerts, setSelectedAlertId]);
 
   // Step 5: Dynamically extract available sensor IDs from all alerts
   const availableSensors = useMemo(() => {
@@ -183,31 +197,6 @@ export default function Alerts() {
 
   return (
     <div className="alerts-page">
-      {/* Step 8: Global Toast Notification on Real-Time Alert Arrival */}
-      {toast && (
-        <div className="alert-toast" role="alert">
-          <span className="alert-toast-icon">
-            {(toast.severity || "").toUpperCase() === "HIGH"
-              ? "🔴"
-              : (toast.severity || "").toUpperCase() === "MEDIUM"
-              ? "🟡"
-              : "🟢"}
-          </span>
-          <div className="alert-toast-body">
-            <strong>{toast.ruleName || "New Alert Triggered"}</strong>
-            <span>{toast.message}</span>
-          </div>
-          <button
-            type="button"
-            className="alert-toast-close"
-            onClick={dismissToast}
-            title="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* Page Header */}
       <div className="alerts-header">
         <div>

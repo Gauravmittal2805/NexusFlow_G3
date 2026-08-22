@@ -2,11 +2,14 @@
  * AlertDetails.jsx — NexusFlow Alert Details Component
  *
  * Implements:
- * - Step 7: Display details (Rule Name, Sensor ID, Severity, Condition/Message, Time)
- * - Step 8: Interactive [ Mark as Read ] button calling backend PATCH /api/alerts/:id/read
+ * - Step 6: Severity-based styling (HIGH, MEDIUM, LOW)
+ * - Step 7: Interactive [ Mark as Read ] button calling backend PATCH /api/alerts/:id/read
+ * - Step 8: View Alert Details (Rule Name, Sensor ID, Message, Severity, Time, Action, Alert ID)
+ * - Step 9: Link Alert to Rule via [ View Rule ] button navigating to Rule Builder
  */
 
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatDateTime, formatTime } from "../utils/dateUtils";
 
 const SEVERITY_CONFIG = {
@@ -17,6 +20,7 @@ const SEVERITY_CONFIG = {
 
 export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
   const [marking, setMarking] = useState(false);
+  const navigate = useNavigate();
 
   if (!alert) {
     return (
@@ -31,16 +35,23 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
   const sevKey = (alert.severity || "HIGH").toUpperCase();
   const sev = SEVERITY_CONFIG[sevKey] || SEVERITY_CONFIG.HIGH;
   const isUnread = alert.status === "unread";
+  const alertId = alert._id || alert.id;
 
   const handleMarkRead = async () => {
     if (!isUnread || marking) return;
     try {
       setMarking(true);
-      await onMarkAsRead(alert._id);
+      await onMarkAsRead(alertId);
     } catch (err) {
       console.error("Error marking alert as read:", err);
     } finally {
       setMarking(false);
+    }
+  };
+
+  const handleNavigateToRule = () => {
+    if (alert.ruleId) {
+      navigate(`/flow?ruleId=${encodeURIComponent(alert.ruleId)}`);
     }
   };
 
@@ -86,7 +97,7 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
         </span>
       </div>
 
-      {/* Details Grid */}
+      {/* Details Grid (Step 8) */}
       <div className="details-body-grid">
         <div className="details-prop-box">
           <span className="prop-label">Sensor ID</span>
@@ -104,7 +115,20 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
 
         <div className="details-prop-box full-width">
           <span className="prop-label">Rule / Condition</span>
-          <span className="prop-value">{alert.ruleName || "Rule Condition"}</span>
+          <div className="prop-rule-row">
+            <span className="prop-value">{alert.ruleName || "Rule Condition"}</span>
+            {/* Step 9: Link Alert to Rule */}
+            {alert.ruleId && (
+              <button
+                type="button"
+                className="btn-view-rule-inline"
+                onClick={handleNavigateToRule}
+                title={`Open Rule "${alert.ruleName}" in Rule Builder`}
+              >
+                🛠️ View Rule
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="details-prop-box full-width">
@@ -119,27 +143,43 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
 
         <div className="details-prop-box">
           <span className="prop-label">Alert ID</span>
-          <span className="prop-value id-code">{alert._id || "—"}</span>
+          <span className="prop-value id-code">{alertId || "—"}</span>
         </div>
       </div>
 
-      {/* Action Footer (Step 8) */}
+      {/* Action Footer (Step 7 & Step 9) */}
       <div className="details-footer">
-        {isUnread ? (
-          <button
-            type="button"
-            className="btn-mark-read"
-            onClick={handleMarkRead}
-            disabled={marking}
-          >
-            {marking ? "Marking as read..." : "✓ Mark as Read"}
-          </button>
-        ) : (
-          <div className="read-confirmation-text">
-            <span>✓ This alert has been acknowledged and marked as read.</span>
-          </div>
-        )}
+        <div className="details-footer-left">
+          {alert.ruleId && (
+            <button
+              type="button"
+              className="btn-view-rule"
+              onClick={handleNavigateToRule}
+              title="Open corresponding rule in Rule Builder"
+            >
+              🛠️ View Rule in Builder
+            </button>
+          )}
+        </div>
+
+        <div className="details-footer-right">
+          {isUnread ? (
+            <button
+              type="button"
+              className="btn-mark-read"
+              onClick={handleMarkRead}
+              disabled={marking}
+            >
+              {marking ? "Marking as read..." : "✓ Mark as Read"}
+            </button>
+          ) : (
+            <div className="read-confirmation-text">
+              <span>✓ Acknowledged and marked as read</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
