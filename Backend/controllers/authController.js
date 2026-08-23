@@ -84,7 +84,7 @@ const registerUser = async (req, res) => {
     }
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
@@ -154,15 +154,11 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Update lastLoginAt
-    user.lastLoginAt = new Date();
-    await user.save();
-
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET || 'fallback_secret',
-      { expiresIn: '30d' }
+      { expiresIn: '7d' }
     );
 
     // Return token and user info
@@ -175,14 +171,13 @@ const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        status: user.status,
-        lastLoginAt: user.lastLoginAt
+        status: user.status
       }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
@@ -221,7 +216,7 @@ const getProfile = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
@@ -276,7 +271,7 @@ const updateProfile = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };
@@ -347,7 +342,7 @@ const changePassword = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error'
     });
   }
 };

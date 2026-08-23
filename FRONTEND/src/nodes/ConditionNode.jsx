@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Handle, Position } from "@xyflow/react";
 
 const CONDITION_MAP = {
@@ -12,69 +12,50 @@ const CONDITION_MAP = {
 export default function ConditionNode({ id, data, selected }) {
   const currentOp = data.operator || ">";
   const config = CONDITION_MAP[currentOp] || CONDITION_MAP[">"];
-
-  const handleOperatorChange = (e) => {
-    const newOp = e.target.value;
-    const newConfig = CONDITION_MAP[newOp] || CONDITION_MAP[">"];
-
-    if (data.onConditionChange) {
-      data.onConditionChange(id, newOp, newConfig);
-    } else if (data.onChange) {
-      data.onChange(id, "operator", newOp);
-    }
-  };
-
-  const handleValueChange = (e) => {
-    if (data.onChange) {
-      data.onChange(id, "value", Number(e.target.value));
-    }
-  };
+  const val = data.value ?? 80;
 
   return (
     <div className={`flow-custom-node condition-node ${selected ? "is-selected" : ""}`}>
       <Handle type="target" position={Position.Top} className="flow-handle handle-top" />
 
       <div className="node-header">
-        <span className="node-icon">{data.icon || config.icon}</span>
-        <span className="node-title">{data.label || config.label}</span>
-        {data.onDuplicate && (
-          <button
-            className="node-action-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onDuplicate(id);
-            }}
-            title="Duplicate Node"
-          >
-            📋
-          </button>
-        )}
+        <div className="node-header-left">
+          <span className="node-icon condition-icon">{data.icon || config.icon}</span>
+          <div>
+            <span className="node-category-tag">CONDITION</span>
+            <span className="node-title">{data.label || config.label}</span>
+          </div>
+        </div>
+        <div className="node-header-actions" onMouseDown={(e) => e.stopPropagation()}>
+          {data.onDuplicate && (
+            <button
+              className="node-mini-btn"
+              onClick={() => data.onDuplicate(id)}
+              title="Duplicate Node"
+            >
+              📋
+            </button>
+          )}
+          {data.onDelete && (
+            <button
+              className="node-mini-btn delete"
+              onClick={() => data.onDelete(id)}
+              title="Delete Node"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="node-content" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="node-field">
-          <label className="field-label">Operator:</label>
-          <select
-            className="node-input-select"
-            value={currentOp}
-            onChange={handleOperatorChange}
-          >
-            <option value=">">Greater Than (&gt;)</option>
-            <option value="<">Less Than (&lt;)</option>
-            <option value="=">Equals (=)</option>
-            <option value=">=">Greater or Equal (&gt;=)</option>
-            <option value="<=">Less or Equal (&lt;=)</option>
-          </select>
+      <div className="node-content">
+        <div className="node-summary-row">
+          <span className="summary-label">Operator:</span>
+          <span className="summary-value condition-operator-tag">{currentOp}</span>
         </div>
-
-        <div className="node-field">
-          <label className="field-label">Threshold Value:</label>
-          <input
-            type="number"
-            className="node-input-number"
-            value={data.value ?? 80}
-            onChange={handleValueChange}
-          />
+        <div className="node-summary-row">
+          <span className="summary-label">Threshold:</span>
+          <span className="summary-value threshold-pill">{val}</span>
         </div>
       </div>
 

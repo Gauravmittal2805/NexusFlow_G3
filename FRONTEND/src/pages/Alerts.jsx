@@ -1,256 +1,307 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import {
-  getAlertsRequest,
-  markAlertAsReadRequest,
-} from "../services/api";
-
 /**
- * Format an ISO timestamp for display in the Alerts table.
+ * Alerts.jsx — NexusFlow Alert History & Management Module
+ *
+ * Implements Steps 1 to 12:
+ * - Step 1: Alert History list
+ * - Step 2: GET /api/alerts integration
+ * - Step 3: Severity Filter (All, High, Medium, Low)
+ * - Step 4: Status Filter (All, Read, Unread)
+ * - Step 5: Sensor Filter (All Sensors, dynamically populated)
+ * - Step 6: Search box (Rule Name, Sensor ID, Message)
+ * - Step 7: Alert Details view
+ * - Step 8: Mark as Read (PATCH /api/alerts/:id/read)
+ * - Step 9: Real-time Socket.IO alert updates without refresh
+ * - Step 10: Descending timestamp sorting (latest first)
+ * - Step 11: Contextual empty states
+ * - Step 12: Loading, error handling, and robust integration
  */
-function formatAlertTime(isoString) {
-  if (!isoString) return "—";
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return "—";
 
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  const timeStr = date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  if (isToday) return timeStr;
-
-  return date.toLocaleDateString([], {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }) + ", " + timeStr;
-}
+import React, { useMemo, useState } from "react";
+import AlertItem from "../components/AlertItem";
+import AlertDetails from "../components/AlertDetails";
+import AlertFilters from "../components/AlertFilters";
+import { useAlerts } from "../context/AlertContext";
 
 export default function Alerts() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const ruleIdFilter = searchParams.get("ruleId") || "";
+  const {
+    alerts,
+    unreadCount,
+    loading,
+    error,
+    refreshAlerts,
+    markAsRead,
+    selectedAlertId,
+    setSelectedAlertId,
+  } = useAlerts();
 
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [markingId, setMarkingId] = useState(null);
+  const [selectedAlert, setSelectedAlert] = useState(null);
+  const [searchTerm, setSearchTerm]       = useState("");
+  const [severityFilter, setSeverityFilter] = useState("All");
+  const [statusFilter, setStatusFilter]   = useState("All");
+  const [sensorFilter, setSensorFilter]   = useState("All");
 
-  const hasFetched = useRef(false);
-
-  const fetchAlerts = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await getAlertsRequest();
-      const data = response.data;
-      // Backend returns { success, count, alerts }
-      const list = Array.isArray(data?.alerts)
-        ? data.alerts
-        : Array.isArray(data)
-        ? data
-        : [];
-      setAlerts(list);
-    } catch (err) {
-      console.error("Failed to fetch alerts:", err);
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        setError("You don't have permission to view alerts.");
-      } else {
-        setError("Unable to load alerts. Please try again.");
+  // Auto-select alert if selectedAlertId is set in context
+  React.useEffect(() => {
+    if (selectedAlertId && alerts.length > 0) {
+      const match = alerts.find(
+        (a) => (a._id || a.id || "").toString() === selectedAlertId.toString()
+      );
+      if (match) {
+        setSelectedAlert(match);
+        // Clear selectedAlertId once consumed
+        if (setSelectedAlertId) setSelectedAlertId(null);
       }
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  }, [selectedAlertId, alerts, setSelectedAlertId]);
 
-  useEffect(() => {
-    if (!hasFetched.current) {
-      hasFetched.current = true;
-      fetchAlerts();
-    }
-  }, [fetchAlerts]);
+  // Step 5: Dynamically extract available sensor IDs from all alerts
+  const availableSensors = useMemo(() => {
+    const set = new Set();
+    alerts.forEach((a) => {
+      if (a.sensorId) set.add(a.sensorId);
+    });
+    return Array.from(set).sort();
+  }, [alerts]);
 
-  const handleMarkAsRead = useCallback(
-    async (alertId) => {
-      if (markingId) return;
-      setMarkingId(alertId);
-      try {
-        await markAlertAsReadRequest(alertId);
-        // Step 9: Update local state without full page reload
-        setAlerts((prev) =>
-          prev.map((a) =>
-            (a._id || a.id) === alertId ? { ...a, isRead: true } : a
-          )
-        );
-      } catch (err) {
-        console.error("Failed to mark alert as read:", err);
-      } finally {
-        setMarkingId(null);
+  // Step 10: Sort alerts descending by timestamp (newest first)
+  const sortedAlerts = useMemo(() => {
+    return [...alerts].sort((a, b) => {
+      const timeA = new Date(a.timestamp || a.createdAt || 0).getTime();
+      const timeB = new Date(b.timestamp || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [alerts]);
+
+  // Step 3, 4, 5, 6: Filtered & searched alert list
+  const filteredAlerts = useMemo(() => {
+    return sortedAlerts.filter((alert) => {
+      // Severity filter
+      if (
+        severityFilter !== "All" &&
+        (alert.severity || "").toUpperCase() !== severityFilter.toUpperCase()
+      ) {
+        return false;
       }
-    },
-    [markingId]
-  );
 
-  const clearFilter = () => {
-    setSearchParams({});
+      // Status filter
+      if (
+        statusFilter !== "All" &&
+        (alert.status || "unread").toLowerCase() !== statusFilter.toLowerCase()
+      ) {
+        return false;
+      }
+
+      // Sensor filter
+      if (
+        sensorFilter !== "All" &&
+        alert.sensorId !== sensorFilter
+      ) {
+        return false;
+      }
+
+      // Search query
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim().toLowerCase();
+        const inRuleName = (alert.ruleName || "").toLowerCase().includes(term);
+        const inSensorId = (alert.sensorId || "").toLowerCase().includes(term);
+        const inMessage  = (alert.message  || "").toLowerCase().includes(term);
+        if (!inRuleName && !inSensorId && !inMessage) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [sortedAlerts, severityFilter, statusFilter, sensorFilter, searchTerm]);
+
+  // Counts for filter badges
+  const filterCounts = useMemo(() => {
+    return {
+      total: alerts.length,
+      unread: unreadCount,
+      read: alerts.length - unreadCount,
+      high: alerts.filter((a) => (a.severity || "").toUpperCase() === "HIGH").length,
+      medium: alerts.filter((a) => (a.severity || "").toUpperCase() === "MEDIUM").length,
+      low: alerts.filter((a) => (a.severity || "").toUpperCase() === "LOW").length,
+    };
+  }, [alerts, unreadCount]);
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    severityFilter !== "All" ||
+    statusFilter !== "All" ||
+    sensorFilter !== "All";
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setSeverityFilter("All");
+    setStatusFilter("All");
+    setSensorFilter("All");
   };
 
-  // Apply ruleId filter if provided via URL query param (?ruleId=xxx)
-  const filteredAlerts = ruleIdFilter
-    ? alerts.filter((a) => {
-        const id = a.ruleId || a.rule?._id || a.rule?.id || a.rule;
-        return String(id) === ruleIdFilter;
-      })
-    : alerts;
+  // Step 8: Handle user selecting an alert & marking as read
+  const handleAlertSelect = async (alert) => {
+    setSelectedAlert(alert);
 
-  const unreadCount = filteredAlerts.filter((a) => !a.isRead).length;
+    // If unread, mark as read
+    if (alert.status === "unread") {
+      const updated = await markAsRead(alert._id);
+      if (updated) {
+        setSelectedAlert(updated);
+      } else {
+        setSelectedAlert((prev) => (prev ? { ...prev, status: "read" } : null));
+      }
+    }
+  };
+
+  const handleManualMarkRead = async (id) => {
+    const updated = await markAsRead(id);
+    if (updated) {
+      setSelectedAlert(updated);
+    } else {
+      setSelectedAlert((prev) => (prev ? { ...prev, status: "read" } : null));
+    }
+  };
+
+  // Step 11: Contextual empty state message
+  const getEmptyStateMessage = () => {
+    if (alerts.length === 0) {
+      return {
+        title: "No alerts found",
+        description: "No rule conditions have triggered an alert yet.",
+      };
+    }
+    if (severityFilter !== "All") {
+      return {
+        title: `No ${severityFilter} severity alerts found`,
+        description: `There are currently no ${severityFilter.toLowerCase()} severity alerts matching your filters.`,
+      };
+    }
+    if (statusFilter !== "All") {
+      return {
+        title: `No ${statusFilter} alerts found`,
+        description: `There are currently no ${statusFilter.toLowerCase()} alerts in the system.`,
+      };
+    }
+    if (sensorFilter !== "All") {
+      return {
+        title: `No alerts for ${sensorFilter}`,
+        description: `No alert history recorded for sensor ${sensorFilter}.`,
+      };
+    }
+    return {
+      title: "No matching alerts found",
+      description: "Try adjusting your search keywords or filter criteria.",
+    };
+  };
 
   return (
     <div className="alerts-page">
-      {/* Page header */}
+      {/* Page Header */}
       <div className="alerts-header">
         <div>
-          <h1 className="alerts-title">🔔 Alerts</h1>
-          <p className="alerts-subtitle">
-            Real-time rule trigger alerts from your sensor pipelines
-          </p>
+          <h2>
+            Alert History
+            {unreadCount > 0 && (
+              <span className="alerts-unread-badge">{unreadCount} unread</span>
+            )}
+          </h2>
+          <p>Real-time audit log of all rule-triggered industrial alerts</p>
         </div>
 
-        <div className="alerts-header-actions">
-          {unreadCount > 0 && (
-            <span className="alerts-unread-badge">{unreadCount} unread</span>
-          )}
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={fetchAlerts}
-            disabled={loading}
-          >
-            {loading ? "⏳ Loading..." : "🔄 Refresh"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn-refresh"
+          onClick={refreshAlerts}
+          title="Refresh alerts from backend"
+        >
+          ↻ Refresh
+        </button>
       </div>
 
-      {/* Active ruleId filter banner */}
-      {ruleIdFilter && (
-        <div className="alerts-filter-banner">
-          <span>
-            🔍 Showing alerts for rule ID: <code>{ruleIdFilter}</code>
-          </span>
-          <button
-            type="button"
-            className="alerts-filter-clear"
-            onClick={clearFilter}
-          >
-            Clear filter ✕
-          </button>
-        </div>
-      )}
+      {/* Step 3, 4, 5, 6: Filters & Search Bar */}
+      <AlertFilters
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        severityFilter={severityFilter}
+        onSeverityChange={setSeverityFilter}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        sensorFilter={sensorFilter}
+        onSensorChange={setSensorFilter}
+        availableSensors={availableSensors}
+        onResetFilters={handleResetFilters}
+        hasActiveFilters={hasActiveFilters}
+        counts={filterCounts}
+      />
 
-      {/* Error state */}
-      {error && (
-        <div className="alerts-error">
-          <span>⚠ {error}</span>
-          <button type="button" className="btn-secondary" onClick={fetchAlerts}>
-            Try Again
-          </button>
-        </div>
-      )}
+      {/* Master-Detail Layout: History List + Details View */}
+      <div className="alerts-layout">
+        {/* Left: Alert History List */}
+        <div className="alerts-list-panel">
+          {/* Step 11: Loading State */}
+          {loading && (
+            <div className="alerts-loading">
+              <div className="spinner" />
+              <span>Loading alerts from server...</span>
+            </div>
+          )}
 
-      {/* Loading state */}
-      {loading && !error && (
-        <div className="alerts-loading">
-          <span>⏳ Loading alerts from backend...</span>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && !error && filteredAlerts.length === 0 && (
-        <div className="alerts-empty">
-          <span className="empty-icon">📭</span>
-          <p>
-            {ruleIdFilter
-              ? "No alerts found for this rule."
-              : "No alerts yet. Alerts will appear here when rules trigger."}
-          </p>
-        </div>
-      )}
-
-      {/* Alert list */}
-      {!loading && !error && filteredAlerts.length > 0 && (
-        <div className="alerts-list">
-          {filteredAlerts.map((alert) => {
-            const alertId = alert._id || alert.id;
-            const isMarkingThis = markingId === alertId;
-
-            return (
-              <div
-                key={alertId}
-                className={`alert-card ${alert.isRead ? "read" : "unread"}`}
+          {/* Step 11: Error State */}
+          {!loading && error && (
+            <div className="alerts-error-state">
+              <div className="error-icon">⚠️</div>
+              <p>{error}</p>
+              <button
+                type="button"
+                className="btn-retry"
+                onClick={refreshAlerts}
               >
-                <div className="alert-card-left">
-                  <span className="alert-severity-icon">
-                    {alert.severity === "critical"
-                      ? "🔴"
-                      : alert.severity === "warning"
-                      ? "🟡"
-                      : "🔵"}
-                  </span>
+                Try Again
+              </button>
+            </div>
+          )}
 
-                  <div className="alert-card-body">
-                    <h4 className="alert-rule-name">
-                      {alert.ruleName || alert.rule?.name || "Unknown Rule"}
-                    </h4>
+          {/* Step 11: Empty State */}
+          {!loading && !error && filteredAlerts.length === 0 && (
+            <div className="alerts-empty-state">
+              <div className="empty-icon">🔔</div>
+              <h3>{getEmptyStateMessage().title}</h3>
+              <p>{getEmptyStateMessage().description}</p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="btn-reset-filters"
+                  onClick={handleResetFilters}
+                >
+                  Reset All Filters
+                </button>
+              )}
+            </div>
+          )}
 
-                    {alert.message && (
-                      <p className="alert-message">{alert.message}</p>
-                    )}
-
-                    <div className="alert-meta">
-                      {alert.sensorId && (
-                        <span className="alert-tag">
-                          📡 {alert.sensorId}
-                        </span>
-                      )}
-                      <span className="alert-tag alert-time">
-                        🕒 {formatAlertTime(alert.triggeredAt || alert.createdAt)}
-                      </span>
-                      {!alert.isRead && (
-                        <span className="alert-tag alert-unread-tag">New</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="alert-card-actions">
-                  {!alert.isRead && (
-                    <button
-                      type="button"
-                      className="btn-mark-read"
-                      disabled={isMarkingThis}
-                      onClick={() => handleMarkAsRead(alertId)}
-                    >
-                      {isMarkingThis ? "Marking..." : "Mark as Read"}
-                    </button>
-                  )}
-                  {alert.isRead && (
-                    <span className="alert-read-label">✓ Read</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {/* Alert Rows */}
+          {!loading &&
+            !error &&
+            filteredAlerts.map((alert) => (
+              <AlertItem
+                key={alert._id}
+                alert={alert}
+                onClick={handleAlertSelect}
+                isSelected={selectedAlert?._id === alert._id}
+              />
+            ))}
         </div>
-      )}
+
+        {/* Right: Step 7 & 8 Alert Details View */}
+        <div className="alerts-detail-panel">
+          <AlertDetails
+            alert={selectedAlert}
+            onClose={() => setSelectedAlert(null)}
+            onMarkAsRead={handleManualMarkRead}
+          />
+        </div>
+      </div>
     </div>
   );
 }

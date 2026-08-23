@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -8,19 +8,24 @@ import {
   Background,
   Controls,
   MiniMap,
-  useReactFlow
+  useReactFlow,
+  MarkerType
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import NodePanel from "../components/NodePanel";
+import NodeConfigPanel from "../components/NodeConfigPanel";
+import SavedRulesPanel from "../components/SavedRulesPanel";
+
 import SensorNode from "../nodes/SensorNode";
 import MovingAverageNode from "../nodes/MovingAverageNode";
 import ConditionNode from "../nodes/ConditionNode";
 import AlertNode from "../nodes/AlertNode";
 
-import { validateGraph, isValidConnection } from "../utils/graphValidation";
-import ruleService from "../services/ruleService";
-import { useTelemetry, formatTriggerTime } from "../context/TelemetryContext";
+import { validateGraph, validateConnectionWithReason } from "../utils/graphValidation";
+import { serializeGraph, deserializeGraph } from "../utils/graphSerializer";
+import { createRuleRequest, getRuleByIdRequest } from "../services/api";
+import { useSearchParams } from "react-router-dom";
 
 const nodeTypes = {
   sensorNode: SensorNode,
@@ -30,230 +35,108 @@ const nodeTypes = {
   alertNode: AlertNode
 };
 
-// Canonical initial rule graph
-const defaultInitialNodes = [
-  {
-    id: "node-1",
-    type: "sensorNode",
-    position: { x: 260, y: 40 },
-    data: {
-      label: "Temperature Sensor",
-      icon: "🌡️",
-      sensor: "temperature",
-      sensorId: "T-001"
+// Canonical initial default pipeline (Temperature -> Moving Avg (5) -> Greater Than (80) -> SMS Alert)
+const defaultInitialRule = {
+  id: "rule-default-1",
+  name: "High Turbine Temperature",
+  nodes: [
+    {
+      id: "1",
+      type: "sensor",
+      position: { x: 260, y: 40 },
+      data: {
+        sensor: "temperature",
+        sensorId: "T-001"
+      }
+    },
+    {
+      id: "2",
+      type: "movingAverage",
+      position: { x: 260, y: 190 },
+      data: {
+        window: 5,
+        operation: "movingAverage"
+      }
+    },
+    {
+      id: "3",
+      type: "condition",
+      position: { x: 260, y: 340 },
+      data: {
+        operator: ">",
+        value: 80
+      }
+    },
+    {
+      id: "4",
+      type: "sms",
+      position: { x: 260, y: 490 },
+      data: {
+        phone: "+919876543210",
+        severity: "high"
+      }
     }
-  },
-  {
-    id: "node-2",
-    type: "movingAverageNode",
-    position: { x: 260, y: 200 },
-    data: {
-      label: "Moving Average",
-      icon: "📈",
-      operation: "movingAverage",
-      window: 5
-    }
-  },
-  {
-    id: "node-3",
-    type: "conditionNode",
-    position: { x: 260, y: 360 },
-    data: {
-      label: "Greater Than",
-      icon: ">",
-      operator: ">",
-      value: 80
-    }
-  },
-  {
-    id: "node-4",
-    type: "alertNode",
-    position: { x: 260, y: 520 },
-    data: {
-      label: "SMS Alert",
-      icon: "📱",
-      actionType: "SMS",
-      phone: "+919876543210",
-      severity: "High"
-    }
-  }
-];
+  ],
+  edges: [
+    { id: "e1-2", source: "1", target: "2" },
+    { id: "e2-3", source: "2", target: "3" },
+    { id: "e3-4", source: "3", target: "4" }
+  ]
+};
 
-const defaultInitialEdges = [
-  {
-    id: "edge-1-2",
-    source: "node-1",
-    target: "node-2",
-    animated: true,
-    style: { stroke: "#3b82f6", strokeWidth: 2 }
-  },
-  {
-    id: "edge-2-3",
-    source: "node-2",
-    target: "node-3",
-    animated: true,
-    style: { stroke: "#f59e0b", strokeWidth: 2 }
-  },
-  {
-    id: "edge-3-4",
-    source: "node-3",
-    target: "node-4",
-    animated: true,
-    style: { stroke: "#ef4444", strokeWidth: 2 }
-  }
-];
-
-/**
- * Step 10: Centralized user-friendly error message resolver
- */
-function getFriendlyErrorMessage(error, defaultMsg) {
-  if (!error) return defaultMsg;
-  const status = error.response?.status;
-  const backendMsg = error.response?.data?.message;
-
-  if (status === 401 || status === 403) {
-    return "You don't have permission to perform this action.";
-  }
-  if (status === 404) {
-    return "Rule not found. It may have been deleted.";
-  }
-  if (
-    status === 400 &&
-    backendMsg &&
-    typeof backendMsg === "string" &&
-    !backendMsg.includes("Cast to ObjectId") &&
-    !backendMsg.includes("MongoError")
-  ) {
-    return backendMsg;
-  }
-  return defaultMsg || "Unable to process request. Please try again.";
-}
-
-/**
- * Normalizes backend node types to React Flow node types
- */
-function normalizeNodeType(type) {
-  if (!type) return "sensorNode";
-  const lower = type.toLowerCase();
-  if (lower === "sensor" || lower === "sensornode") return "sensorNode";
-  if (
-    lower === "movingaverage" ||
-    lower === "movingaveragenode" ||
-    lower === "processing" ||
-    lower === "processingnode"
-  ) {
-    return "movingAverageNode";
-  }
-  if (lower === "condition" || lower === "conditionnode") return "conditionNode";
-  if (
-    lower === "alert" ||
-    lower === "alertnode" ||
-    lower === "sms" ||
-    lower === "email" ||
-    lower === "system"
-  ) {
-    return "alertNode";
-  }
-  return type;
-}
-
-function FlowCanvasContent() {
+function FlowCanvas({
+  ruleName,
+  setRuleName,
+  activeRuleId,
+  setActiveRuleId,
+  selectedNode,
+  setSelectedNode,
+  rightPanelTab,
+  setRightPanelTab,
+  onOpenJsonModal
+}) {
   const reactFlowWrapper = useRef(null);
-  const { screenToFlowPosition, fitView } = useReactFlow();
-  const { ruleTriggers = {} } = useTelemetry();
-
-  // Rule metadata state
-  const [ruleName, setRuleName] = useState(() => {
-    try {
-      const saved = localStorage.getItem("nexusflow_rule_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.name) return parsed.name;
-      }
-    } catch (e) {}
-    return "High Temperature Alert";
-  });
-
-  const [ruleDescription, setRuleDescription] = useState(() => {
-    try {
-      const saved = localStorage.getItem("nexusflow_rule_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.description) return parsed.description;
-      }
-    } catch (e) {}
-    return "Alert when temperature exceeds 80°C";
-  });
-
-  const [selectedRuleId, setSelectedRuleId] = useState(null);
-  const [activeTab, setActiveTab] = useState("nodes");
-  const [savedRules, setSavedRules] = useState([]);
-  
-  // Step 9: Async loading flags for robust state management & multi-click prevention
-  const [loadingRules, setLoadingRules] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [loadingRuleId, setLoadingRuleId] = useState(null);
-  const [deletingRuleId, setDeletingRuleId] = useState(null);
-  const [togglingRuleId, setTogglingRuleId] = useState(null);
-
   const [toast, setToast] = useState(null);
-  const [jsonModalData, setJsonModalData] = useState(null);
-
-  // React Flow graph states
-  const [nodes, setNodes, onNodesChange] = useNodesState(() => {
-    try {
-      const saved = localStorage.getItem("nexusflow_rule_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.nodes && parsed.nodes.length > 0) return parsed.nodes;
-      }
-    } catch (e) {
-      console.warn("Could not load nodes from localStorage", e);
-    }
-    return defaultInitialNodes;
-  });
-
-  const [edges, setEdges, onEdgesChange] = useEdgesState(() => {
-    try {
-      const saved = localStorage.getItem("nexusflow_rule_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.edges) return parsed.edges;
-      }
-    } catch (e) {
-      console.warn("Could not load edges from localStorage", e);
-    }
-    return defaultInitialEdges;
-  });
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const showToast = (type, message) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4500);
   };
 
-  // Step 4: Fetch all saved rules from backend (GET /api/rules)
-  const fetchRules = useCallback(async () => {
-    setLoadingRules(true);
+  // Helper to load initial state from localStorage or default template
+  const getInitialGraphState = () => {
     try {
-      const res = await ruleService.getRules();
-      if (res.data && res.data.rules) {
-        setSavedRules(res.data.rules);
+      const storedRulesRaw = localStorage.getItem("nexusflow_rules");
+      if (storedRulesRaw) {
+        const storedRules = JSON.parse(storedRulesRaw);
+        if (Array.isArray(storedRules) && storedRules.length > 0) {
+          const lastActiveId = localStorage.getItem("nexusflow_active_rule_id");
+          const target = storedRules.find((r) => r.id === lastActiveId) || storedRules[0];
+          return deserializeGraph(target);
+        }
       }
-    } catch (err) {
-      console.warn("Failed to fetch saved rules from API:", err.message);
-    } finally {
-      setLoadingRules(false);
+    } catch (e) {
+      console.warn("Could not parse nexusflow_rules from localStorage", e);
     }
+    return deserializeGraph(defaultInitialRule);
+  };
+
+  const initialData = useMemo(() => getInitialGraphState(), []);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialData.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialData.edges);
+
+  // Initialize Rule ID & Name on first render
+  useEffect(() => {
+    if (initialData.id) setActiveRuleId(initialData.id);
+    if (initialData.ruleName) setRuleName(initialData.ruleName);
   }, []);
 
-  // Fetch rules on component mount
-  useEffect(() => {
-    fetchRules();
-  }, [fetchRules]);
-
-  // Handle live node updates
-  const updateNodeData = useCallback(
-    (nodeId, field, value) => {
+  // Update a node's data in state
+  const handleUpdateNodeData = useCallback(
+    (nodeId, partialData) => {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -261,7 +144,7 @@ function FlowCanvasContent() {
               ...node,
               data: {
                 ...node.data,
-                [field]: value
+                ...partialData
               }
             };
           }
@@ -272,103 +155,8 @@ function FlowCanvasContent() {
     [setNodes]
   );
 
-  // Handle Metric change (updates metric, label, icon, unit, sensorId)
-  const handleMetricChange = useCallback(
-    (nodeId, newMetricKey, newConfig) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === nodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                sensor: newMetricKey,
-                label: newConfig.label,
-                icon: newConfig.icon,
-                unit: newConfig.unit,
-                sensorId: newConfig.sensorId
-              }
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  // Handle Operation change (Moving Avg, Average, Min, Max)
-  const handleOpChange = useCallback(
-    (nodeId, newOpKey, newConfig) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === nodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                operation: newOpKey,
-                label: newConfig.label,
-                icon: newConfig.icon,
-                window: node.data.window ?? newConfig.defaultWindow
-              }
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  // Handle Condition change (>, <, =, >=, <=)
-  const handleConditionChange = useCallback(
-    (nodeId, newOp, newConfig) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === nodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                operator: newOp,
-                label: newConfig.label,
-                icon: newConfig.icon
-              }
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  // Handle Alert/Action change (SMS, Email, System)
-  const handleAlertChange = useCallback(
-    (nodeId, newAction, newConfig) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === nodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                actionType: newAction,
-                label: newConfig.label,
-                icon: newConfig.icon
-              }
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  // Duplicate Node
-  const duplicateNode = useCallback(
+  // Duplicate a node
+  const handleDuplicateNode = useCallback(
     (nodeId) => {
       setNodes((nds) => {
         const target = nds.find((n) => n.id === nodeId);
@@ -379,64 +167,96 @@ function FlowCanvasContent() {
           ...target,
           id: newId,
           position: {
-            x: target.position.x + 45,
-            y: target.position.y + 45
+            x: target.position.x + 50,
+            y: target.position.y + 50
           },
           selected: true,
           data: { ...target.data }
         };
 
-        showToast("info", `Duplicated node: ${target.data.label}`);
+        showToast("info", `Duplicated: ${target.data.label || target.id}`);
+        setSelectedNode(newNode);
         return nds.map((n) => ({ ...n, selected: false })).concat(newNode);
       });
     },
-    [setNodes]
+    [setNodes, setSelectedNode]
   );
 
-  // Re-attach handlers to nodes on render
+  // Delete a specific node
+  const handleDeleteNode = useCallback(
+    (nodeId) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setSelectedNode(null);
+      showToast("info", "Node deleted from canvas.");
+    },
+    [setNodes, setEdges, setSelectedNode]
+  );
+
+  // Attach callbacks to nodes whenever rendered
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
         data: {
           ...n.data,
-          onChange: updateNodeData,
-          onMetricChange: handleMetricChange,
-          onOpChange: handleOpChange,
-          onConditionChange: handleConditionChange,
-          onAlertChange: handleAlertChange,
-          onDuplicate: duplicateNode
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode
         }
       }))
     );
-  }, [
-    updateNodeData,
-    handleMetricChange,
-    handleOpChange,
-    handleConditionChange,
-    handleAlertChange,
-    duplicateNode,
-    setNodes
-  ]);
+  }, [handleDuplicateNode, handleDeleteNode, setNodes]);
 
-  // Connection Validator Callback using imported utility
+  // Track currently selected node
+  const onNodeClick = useCallback(
+    (event, node) => {
+      setSelectedNode(node);
+      if (rightPanelTab !== "config") {
+        setRightPanelTab("config");
+      }
+    },
+    [setSelectedNode, rightPanelTab, setRightPanelTab]
+  );
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+  }, [setSelectedNode]);
+
+  // Connection Validator Callback (Step 4)
   const checkConnection = useCallback(
-    (connection) => isValidConnection(connection, nodes),
+    (connection) => {
+      const validation = validateConnectionWithReason(connection, nodes);
+      if (!validation.isValid) {
+        // Visual toast alert for invalid connection attempt
+        showToast("error", validation.reason);
+        return false;
+      }
+      return true;
+    },
     [nodes]
   );
 
+  // Add edge with styled directional arrow marker (Step 13)
   const onConnect = useCallback(
-    (params) =>
+    (params) => {
       setEdges((eds) =>
         addEdge(
           {
             ...params,
             animated: true,
-            style: { stroke: "#6366f1", strokeWidth: 2 }
+            style: { stroke: "#6366f1", strokeWidth: 2 },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+              color: "#6366f1"
+            }
           },
           eds
         )
-      ),
+      );
+      showToast("info", "Connected nodes!");
+    },
     [setEdges]
   );
 
@@ -465,321 +285,392 @@ function FlowCanvasContent() {
         position,
         data: {
           ...nodeData,
-          onChange: updateNodeData,
-          onMetricChange: handleMetricChange,
-          onOpChange: handleOpChange,
-          onConditionChange: handleConditionChange,
-          onAlertChange: handleAlertChange,
-          onDuplicate: duplicateNode
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode
         }
       };
 
       setNodes((nds) => nds.concat(newNode));
+      setSelectedNode(newNode);
+      setRightPanelTab("config");
+      showToast("info", `Added ${nodeData.label} to canvas.`);
     },
-    [
-      screenToFlowPosition,
-      setNodes,
-      updateNodeData,
-      handleMetricChange,
-      handleOpChange,
-      handleConditionChange,
-      handleAlertChange,
-      duplicateNode
-    ]
+    [screenToFlowPosition, setNodes, setSelectedNode, setRightPanelTab, handleDuplicateNode, handleDeleteNode]
   );
 
-  // Step 3 & Step 6: Connect Save Button (POST /api/rules or PUT /api/rules/:id)
-  const handleSaveRule = async (isSaveAsNew = false) => {
-    if (isSaving) return;
-
+  // Step 5 & 6 & 8: Save Rule (Validation -> Serialization -> LocalStorage + Backend API)
+  const handleSaveRule = async () => {
+    // 1. Complete Rule Validation
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
       showToast("error", validation.message);
       return;
     }
 
-    setIsSaving(true);
+    // 2. Generate Clean Graph JSON using Serializer (Step 6 & 7)
+    const ruleIdToSave = activeRuleId || `rule-${Date.now()}`;
+    const cleanPayload = serializeGraph(ruleName, nodes, edges, ruleIdToSave);
 
-    // Clean node data so no transient callback functions are sent to API
-    const cleanNodes = nodes.map((n) => {
-      const {
-        onChange,
-        onMetricChange,
-        onOpChange,
-        onConditionChange,
-        onAlertChange,
-        onDuplicate,
-        ...cleanData
-      } = n.data || {};
+    console.log("=========================================");
+    console.log("🚀 NEXUSFLOW RULE GRAPH JSON PAYLOAD");
+    console.log("=========================================");
+    console.log(JSON.stringify(cleanPayload, null, 2));
 
-      return {
-        id: n.id,
-        type: n.type,
-        position: n.position,
-        data: cleanData
-      };
+    // 3. Save to localStorage under `nexusflow_rules` (Step 8)
+    try {
+      let existingRules = [];
+      const stored = localStorage.getItem("nexusflow_rules");
+      if (stored) {
+        existingRules = JSON.parse(stored);
+      }
+
+      const existingIndex = existingRules.findIndex((r) => r.id === ruleIdToSave);
+      if (existingIndex >= 0) {
+        existingRules[existingIndex] = cleanPayload;
+      } else {
+        existingRules.unshift(cleanPayload);
+      }
+
+      localStorage.setItem("nexusflow_rules", JSON.stringify(existingRules));
+      localStorage.setItem("nexusflow_active_rule_id", ruleIdToSave);
+      setActiveRuleId(ruleIdToSave);
+
+      // 4. Try Backend API (Step 14)
+      try {
+        await createRuleRequest(cleanPayload);
+        showToast("success", `✅ Rule "${ruleName}" saved to Database & LocalStorage!`);
+      } catch (backendError) {
+        const msg = backendError.response?.data?.message || "Saved locally (Backend unauthenticated/offline)";
+        showToast("success", `✅ Rule "${ruleName}" saved locally! (${msg})`);
+      }
+    } catch (e) {
+      console.error("Storage error:", e);
+      showToast("error", "Failed to save rule.");
+    }
+  };
+
+  // Step 9 & 10: Load a saved rule from My Rules into canvas
+  const handleLoadSavedRule = (ruleData) => {
+    const deserialized = deserializeGraph(ruleData, {
+      onDuplicate: handleDuplicateNode,
+      onDelete: handleDeleteNode
     });
 
-    const cleanEdges = edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      animated: e.animated ?? true,
-      style: e.style
-    }));
+    setNodes(deserialized.nodes);
+    setEdges(deserialized.edges);
+    setRuleName(deserialized.ruleName);
+    setActiveRuleId(deserialized.id);
+    setSelectedNode(null);
+    localStorage.setItem("nexusflow_active_rule_id", deserialized.id);
 
-    const rulePayload = {
-      name: (ruleName || "High Temperature Alert").trim(),
-      description: (ruleDescription || "").trim(),
-      nodes: cleanNodes,
-      edges: cleanEdges
+    showToast("info", `Loaded rule: "${deserialized.ruleName}"`);
+    setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
+  };
+
+  // Step 9: Automatic rule loading when navigating from Alert Details (e.g. /flow?ruleId=xyz)
+  const [searchParams] = useSearchParams();
+  const urlRuleId = searchParams.get("ruleId");
+
+  useEffect(() => {
+    if (!urlRuleId) return;
+
+    let isMounted = true;
+    const loadRuleFromParam = async () => {
+      // 1. Check localStorage first
+      try {
+        const storedRulesRaw = localStorage.getItem("nexusflow_rules");
+        if (storedRulesRaw) {
+          const storedRules = JSON.parse(storedRulesRaw);
+          const matched = storedRules.find(
+            (r) =>
+              (r.id && r.id.toString() === urlRuleId) ||
+              (r._id && r._id.toString() === urlRuleId)
+          );
+          if (matched && isMounted) {
+            handleLoadSavedRule(matched);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load rule from localStorage:", err);
+      }
+
+      // 2. Fetch from backend API
+      try {
+        const res = await getRuleByIdRequest(urlRuleId);
+        const fetchedRule = res?.data?.rule || res?.data;
+        if (fetchedRule && isMounted) {
+          handleLoadSavedRule(fetchedRule);
+        }
+      } catch (apiErr) {
+        console.warn("Could not load rule from backend API:", apiErr.message);
+      }
     };
 
+    loadRuleFromParam();
+    return () => {
+      isMounted = false;
+    };
+  }, [urlRuleId]);
+
+  // Step 11: Delete a saved rule from localStorage
+  const handleDeleteSavedRule = (ruleId) => {
     try {
-      if (selectedRuleId && !isSaveAsNew) {
-        // Step 6: Update existing rule (PUT /api/rules/:id)
-        await ruleService.updateRule(selectedRuleId, rulePayload);
-        showToast("success", "Rule updated successfully!");
-      } else {
-        // Step 3: Create new rule (POST /api/rules)
-        const res = await ruleService.createRule(rulePayload);
-        if (res.data?.rule?._id) {
-          setSelectedRuleId(res.data.rule._id);
-        }
-        showToast("success", "Rule created successfully!");
+      const stored = localStorage.getItem("nexusflow_rules");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const filtered = parsed.filter((r) => r.id !== ruleId);
+        localStorage.setItem("nexusflow_rules", JSON.stringify(filtered));
       }
-
-      // Persist locally as well
-      localStorage.setItem(
-        "nexusflow_rule_data",
-        JSON.stringify({
-          name: rulePayload.name,
-          description: rulePayload.description,
-          nodes,
-          edges,
-          compiled: rulePayload
-        })
-      );
-
-      // Refresh list of saved rules
-      fetchRules();
+      if (activeRuleId === ruleId) {
+        setActiveRuleId(null);
+      }
+      showToast("info", "Rule deleted from My Rules.");
     } catch (e) {
-      console.error("Save rule error:", e);
-      // Step 10: Handle API errors gracefully
-      const friendlyMsg = getFriendlyErrorMessage(
-        e,
-        selectedRuleId && !isSaveAsNew
-          ? "Unable to update rule. Please try again."
-          : "Unable to save rule. Please try again."
-      );
-      showToast("error", friendlyMsg);
-    } finally {
-      setIsSaving(false);
+      console.error("Failed to delete rule", e);
     }
   };
 
-  // Step 5: Open Existing Rule (GET /api/rules/:id -> React Flow State)
-  const handleLoadRule = async (ruleId) => {
-    if (loadingRuleId) return;
-
-    setLoadingRuleId(ruleId);
-    try {
-      const res = await ruleService.getRuleById(ruleId);
-      const rule = res.data?.rule;
-
-      if (!rule) {
-        showToast("error", "Rule not found. It may have been deleted.");
-        return;
-      }
-
-      // 1. Set Rule Name and Description
-      setRuleName(rule.name || "Untitled Rule");
-      setRuleDescription(rule.description || "");
-      setSelectedRuleId(rule._id || ruleId);
-
-      // 2. Rehydrate Nodes with normalized types and handlers
-      const hydratedNodes = (rule.nodes || []).map((node, index) => {
-        const normalizedType = normalizeNodeType(node.type);
-        return {
-          id: node.id || `node-${index + 1}`,
-          type: normalizedType,
-          position: node.position || { x: 260, y: index * 160 + 40 },
-          data: {
-            ...(node.data || {}),
-            onChange: updateNodeData,
-            onMetricChange: handleMetricChange,
-            onOpChange: handleOpChange,
-            onConditionChange: handleConditionChange,
-            onAlertChange: handleAlertChange,
-            onDuplicate: duplicateNode
-          }
-        };
-      });
-
-      // 3. Rehydrate Edges
-      const hydratedEdges = (rule.edges || []).map((edge, index) => ({
-        id: edge.id || `edge-${edge.source}-${edge.target}-${index}`,
-        source: edge.source,
-        target: edge.target,
-        animated: edge.animated ?? true,
-        style: edge.style || { stroke: "#6366f1", strokeWidth: 2 }
-      }));
-
-      // 4. Update React Flow state
-      setNodes(hydratedNodes);
-      setEdges(hydratedEdges);
-
-      // 5. Center canvas on loaded rule
-      setTimeout(() => {
-        fitView({ padding: 0.2, duration: 400 });
-      }, 100);
-
-      showToast("success", `Loaded rule: "${rule.name}"`);
-    } catch (err) {
-      console.error("Error loading rule:", err);
-      // Step 10: User friendly error message
-      showToast("error", getFriendlyErrorMessage(err, "Unable to load rule. Please try again."));
-    } finally {
-      setLoadingRuleId(null);
-    }
+  // Step 12: Clear Canvas Handler
+  const handleConfirmClearCanvas = () => {
+    setNodes([]);
+    setEdges([]);
+    setSelectedNode(null);
+    setRuleName("New Rule");
+    setActiveRuleId(`rule-${Date.now()}`);
+    setClearModalOpen(false);
+    showToast("info", "Canvas cleared. Drag new nodes from library.");
   };
 
-  // Step 7: Enable / Disable Rule (PATCH /api/rules/:id/status)
-  const handleToggleRuleStatus = async (ruleId, currentStatus) => {
-    if (togglingRuleId) return;
-
-    setTogglingRuleId(ruleId);
-    try {
-      const newStatus = !currentStatus;
-      await ruleService.updateRuleStatus(ruleId, newStatus);
-      showToast("info", `Rule ${newStatus ? "enabled" : "disabled"} successfully`);
-      fetchRules();
-    } catch (err) {
-      console.error("Error updating status:", err);
-      // Step 10: User friendly error message
-      showToast("error", getFriendlyErrorMessage(err, "Unable to update rule status. Please try again."));
-    } finally {
-      setTogglingRuleId(null);
-    }
+  // Create new rule from template
+  const handleCreateNewRule = () => {
+    setNodes([]);
+    setEdges([]);
+    setSelectedNode(null);
+    setRuleName("New Rule");
+    setActiveRuleId(`rule-${Date.now()}`);
+    showToast("info", "Started new rule.");
   };
 
-  // Step 8: Delete Rule (DELETE /api/rules/:id)
-  const handleDeleteRule = async (ruleId) => {
-    if (deletingRuleId) return;
-
-    setDeletingRuleId(ruleId);
-    try {
-      await ruleService.deleteRule(ruleId);
-      // Step 8: Show "Rule deleted successfully"
-      showToast("info", "Rule deleted successfully");
-      if (selectedRuleId === ruleId) {
-        handleNewRule();
-      }
-      fetchRules();
-    } catch (err) {
-      console.error("Error deleting rule:", err);
-      // Step 10: User friendly error message
-      showToast("error", getFriendlyErrorMessage(err, "Unable to delete rule. Please try again."));
-    } finally {
-      setDeletingRuleId(null);
-    }
+  // Reset to default sample pipeline
+  const handleResetSample = () => {
+    handleLoadSavedRule(defaultInitialRule);
   };
 
-  // New Rule / Reset Canvas
-  const handleNewRule = () => {
-    setSelectedRuleId(null);
-    setRuleName("High Temperature Alert");
-    setRuleDescription("Alert when temperature exceeds 80°C");
-    setNodes(defaultInitialNodes);
-    setEdges(defaultInitialEdges);
-    setActiveTab("nodes");
-    setTimeout(() => {
-      fitView({ padding: 0.2, duration: 400 });
-    }, 100);
-    showToast("info", "Started a new rule template.");
-  };
+  const validationState = validateGraph(nodes, edges);
 
-  const handleDuplicateSelected = () => {
-    const selectedNodes = nodes.filter((n) => n.selected);
-    if (selectedNodes.length === 0) {
-      showToast("info", "Select a node first to duplicate.");
-      return;
-    }
-    selectedNodes.forEach((n) => duplicateNode(n.id));
-  };
+  // Find latest selected node from nodes state so changes reflect immediately
+  const activeSelectedNode = nodes.find((n) => selectedNode && n.id === selectedNode.id) || null;
 
-  const handleDeleteSelected = () => {
-    setNodes((nds) => nds.filter((node) => !node.selected));
-    setEdges((eds) => eds.filter((edge) => !edge.selected));
-  };
+  return (
+    <div className="flow-builder-container" ref={reactFlowWrapper}>
+      {/* Toast Alert Banner */}
+      {toast && <div className={`save-toast-banner ${toast.type}`}>{toast.message}</div>}
 
-  const currentValidation = validateGraph(nodes, edges);
+      {/* ─── Center Canvas Header Bar ─── */}
+      <div className="canvas-header-bar">
+        <div className="canvas-info">
+          <span className={`canvas-status-dot ${validationState.valid ? "valid" : "invalid"}`}></span>
+          <span className="canvas-status-text">
+            {validationState.valid ? "Rule Valid & Connected" : "Rule Needs Attention"}
+          </span>
+          <span className="canvas-node-count">
+            ({nodes.length} nodes, {edges.length} connections)
+          </span>
+        </div>
+
+        <div className="canvas-actions">
+          <button
+            className="btn-canvas-action"
+            onClick={() => onOpenJsonModal(serializeGraph(ruleName, nodes, edges, activeRuleId))}
+            title="Inspect clean Compiler JSON"
+          >
+            🔍 View JSON
+          </button>
+          <button
+            className={`btn-canvas-action ${rightPanelTab === "rules" ? "active" : ""}`}
+            onClick={() => setRightPanelTab(rightPanelTab === "rules" ? "config" : "rules")}
+            title="Browse and load saved rules"
+          >
+            📂 My Rules
+          </button>
+          <button
+            className="btn-canvas-action danger"
+            onClick={() => setClearModalOpen(true)}
+            title="Clear all nodes from canvas"
+          >
+            🗑️ Clear Canvas
+          </button>
+          <button
+            className="btn-canvas-action"
+            onClick={handleResetSample}
+            title="Reset to default Temperature -> Moving Avg -> Condition -> SMS rule"
+          >
+            ↺ Reset Demo
+          </button>
+          <button className="btn-save-rule" onClick={handleSaveRule} title="Validate & Save Rule">
+            💾 Save Rule
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Main ReactFlow Workspace ─── */}
+      <div className="react-flow-split-view">
+        <div className="flow-canvas-inner">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            isValidConnection={checkConnection}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            nodeTypes={nodeTypes}
+            fitView
+            snapToGrid
+            snapGrid={[15, 15]}
+            deleteKeyCode={["Backspace", "Delete"]}
+            defaultEdgeOptions={{
+              animated: true,
+              style: { stroke: "#6366f1", strokeWidth: 2 },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 16,
+                height: 16,
+                color: "#6366f1"
+              }
+            }}
+          >
+            <Background color="#cbd5e1" gap={20} size={1} />
+            <Controls className="custom-flow-controls" />
+            <MiniMap
+              nodeColor={(node) => {
+                switch (node.type) {
+                  case "sensorNode":
+                    return "#3b82f6";
+                  case "movingAverageNode":
+                  case "processingNode":
+                    return "#8b5cf6";
+                  case "conditionNode":
+                    return "#f59e0b";
+                  case "alertNode":
+                    return "#ef4444";
+                  default:
+                    return "#64748b";
+                }
+              }}
+              style={{ height: 95 }}
+              zoomable
+              pannable
+            />
+          </ReactFlow>
+        </div>
+
+        {/* ─── Right Side Panel (Tabs: Node Config OR My Rules) ─── */}
+        <div className="flow-right-sidebar">
+          <div className="right-panel-tabs">
+            <button
+              className={`panel-tab-btn ${rightPanelTab === "config" ? "active" : ""}`}
+              onClick={() => setRightPanelTab("config")}
+            >
+              ⚙️ Node Config
+            </button>
+            <button
+              className={`panel-tab-btn ${rightPanelTab === "rules" ? "active" : ""}`}
+              onClick={() => setRightPanelTab("rules")}
+            >
+              📂 My Rules
+            </button>
+          </div>
+
+          <div className="right-panel-content">
+            {rightPanelTab === "config" ? (
+              <NodeConfigPanel
+                selectedNode={activeSelectedNode}
+                onUpdateNodeData={handleUpdateNodeData}
+                onDuplicateNode={handleDuplicateNode}
+                onDeleteNode={handleDeleteNode}
+                onClose={() => setSelectedNode(null)}
+              />
+            ) : (
+              <SavedRulesPanel
+                activeRuleId={activeRuleId}
+                onLoadRule={handleLoadSavedRule}
+                onNewRule={handleCreateNewRule}
+                onDeleteRule={handleDeleteSavedRule}
+                onViewJson={onOpenJsonModal}
+                onClose={() => setRightPanelTab("config")}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Step 12: Clear Canvas Confirmation Modal ─── */}
+      {clearModalOpen && (
+        <div className="modal-backdrop" onClick={() => setClearModalOpen(false)}>
+          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Clear Flow Canvas?</h3>
+              <button className="modal-close-btn" onClick={() => setClearModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to clear the canvas? All unsaved nodes and connections will be removed.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setClearModalOpen(false)}>
+                Cancel
+              </button>
+              <button className="btn-danger-solid" onClick={handleConfirmClearCanvas}>
+                Yes, Clear Canvas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FlowBuilder() {
+  const [ruleName, setRuleName] = useState("High Turbine Temperature");
+  const [activeRuleId, setActiveRuleId] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [rightPanelTab, setRightPanelTab] = useState("config");
+  const [jsonModalData, setJsonModalData] = useState(null);
 
   return (
     <div className="flow-builder-page">
-      {/* Header Bar */}
+      {/* Top Navigation & Rule Name Bar */}
       <div className="flow-builder-header">
         <div className="flow-builder-title">
           <h2>NexusFlow Rule Builder</h2>
-          <p>Visually construct automated telemetry threshold triggers & actions</p>
+          <p>Design real-time telemetry processing pipelines & automated threshold triggers</p>
         </div>
 
-        <div className="rule-header-inputs">
-          <div className="rule-name-input-group">
-            <label htmlFor="rule-name-input">Rule Name:</label>
+        {/* Step 2: Rule Name Input */}
+        <div className="rule-name-input-group">
+          <label htmlFor="rule-name-input">Rule Name:</label>
+          <div className="rule-name-wrapper">
+            <span className="rule-name-icon">🏷️</span>
             <input
               id="rule-name-input"
               type="text"
               className="rule-name-input"
               value={ruleName}
               onChange={(e) => setRuleName(e.target.value)}
-              placeholder="e.g. High Temperature Alert"
+              placeholder="e.g. High Turbine Temperature"
             />
           </div>
-
-          <div className="rule-desc-input-group">
-            <label htmlFor="rule-desc-input">Description:</label>
-            <input
-              id="rule-desc-input"
-              type="text"
-              className="rule-desc-input"
-              value={ruleDescription}
-              onChange={(e) => setRuleDescription(e.target.value)}
-              placeholder="e.g. Alert when temperature exceeds 80°C"
-            />
-          </div>
-
-          {selectedRuleId && (() => {
-            const selectedTrigger =
-              ruleTriggers[selectedRuleId] ||
-              ruleTriggers[String(selectedRuleId)] ||
-              null;
-            const isJustNow = Boolean(
-              selectedTrigger &&
-                selectedTrigger.triggeredAtMs &&
-                Date.now() - selectedTrigger.triggeredAtMs < 60000
-            );
-            return (
-              <div className={`active-rule-pill ${isJustNow ? "triggered" : ""}`}>
-                <span>Editing: {ruleName}</span>
-                {isJustNow && (
-                  <span className="live-rule-trigger-chip">⚠ Triggered Just Now</span>
-                )}
-                <button
-                  type="button"
-                  className="clear-loaded-btn"
-                  onClick={handleNewRule}
-                  title="Clear and create new rule"
-                >
-                  ✕
-                </button>
-              </div>
-            );
-          })()}
         </div>
       </div>
 
-      {/* Main Workspace Layout */}
+      {/* Step 1: 3-Column Product Layout (Library | Canvas | Config/Rules) */}
       <div className="flow-builder-workspace">
         {/* Left Node / Saved Rules Panel */}
         <NodePanel
@@ -801,169 +692,23 @@ function FlowCanvasContent() {
 
         {/* Center Flow Canvas */}
         <div className="flow-canvas-wrapper">
-          <div className="flow-canvas-container" ref={reactFlowWrapper}>
-            {toast && (
-              <div className={`save-toast-banner ${toast.type}`}>
-                {toast.message}
-              </div>
-            )}
-
-            <div className="canvas-header-bar">
-              <div className="canvas-info">
-                <span
-                  className={`canvas-status-dot ${currentValidation.valid ? "valid" : "invalid"}`}
-                ></span>
-                <span className="canvas-status-text">
-                  {currentValidation.valid
-                    ? "Rule Valid"
-                    : "Rule Needs Attention"}
-                </span>
-                <span className="canvas-node-count">
-                  ({nodes.length} nodes, {edges.length} edges)
-                </span>
-
-                {selectedRuleId && (() => {
-                  const currentTrigger =
-                    ruleTriggers[selectedRuleId] ||
-                    ruleTriggers[String(selectedRuleId)] ||
-                    null;
-                  if (!currentTrigger) return null;
-
-                  const isJustNow = Boolean(
-                    currentTrigger.triggeredAtMs &&
-                      Date.now() - currentTrigger.triggeredAtMs < 60000
-                  );
-                  const timeFormatted = formatTriggerTime(currentTrigger.timestamp);
-
-                  return (
-                    <div
-                      className={`canvas-trigger-pill ${isJustNow ? "just-now" : "historical"}`}
-                    >
-                      {isJustNow ? (
-                        <span>⚠ Triggered just now ({timeFormatted})</span>
-                      ) : (
-                        <span>🕒 Last Triggered: {timeFormatted}</span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="canvas-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleDuplicateSelected}
-                  title="Duplicate Selected Node"
-                >
-                  📋 Duplicate
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleDeleteSelected}
-                  title="Delete Selected Node"
-                >
-                  🗑️ Delete
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() =>
-                    setJsonModalData({
-                      nodes,
-                      edges,
-                      name: ruleName,
-                      description: ruleDescription
-                    })
-                  }
-                  title="Inspect Rule JSON payload"
-                >
-                  🔍 View JSON
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleNewRule}
-                  title="Reset to blank/sample rule"
-                >
-                  ➕ New / Reset
-                </button>
-
-                {selectedRuleId && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={isSaving}
-                    onClick={() => handleSaveRule(true)}
-                    title="Save current canvas as a new rule copy"
-                  >
-                    {isSaving ? "💾 Saving..." : "💾 Save as New"}
-                  </button>
-                )}
-
-                {/* Step 9: Dynamic button text and disabled state */}
-                <button
-                  type="button"
-                  className="btn-save"
-                  disabled={isSaving}
-                  onClick={() => handleSaveRule(false)}
-                >
-                  {isSaving
-                    ? selectedRuleId
-                      ? "💾 Updating Rule..."
-                      : "💾 Saving Rule..."
-                    : selectedRuleId
-                    ? "💾 Update Rule"
-                    : "💾 Save Rule"}
-                </button>
-              </div>
-            </div>
-
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              isValidConnection={checkConnection}
-              onDragOver={onDragOver}
-              onDrop={onDrop}
-              nodeTypes={nodeTypes}
-              fitView
-              snapToGrid
-              snapGrid={[15, 15]}
-              deleteKeyCode={["Backspace", "Delete"]}
-              defaultEdgeOptions={{ animated: true }}
-            >
-              <Background color="#cbd5e1" gap={20} size={1} />
-              <Controls className="custom-flow-controls" />
-              <MiniMap
-                nodeColor={(node) => {
-                  switch (node.type) {
-                    case "sensorNode":
-                      return "#3b82f6";
-                    case "movingAverageNode":
-                    case "processingNode":
-                      return "#8b5cf6";
-                    case "conditionNode":
-                      return "#f59e0b";
-                    case "alertNode":
-                      return "#ef4444";
-                    default:
-                      return "#64748b";
-                  }
-                }}
-                style={{ height: 100 }}
-                zoomable
-                pannable
-              />
-            </ReactFlow>
-          </div>
+          <ReactFlowProvider>
+            <FlowCanvas
+              ruleName={ruleName}
+              setRuleName={setRuleName}
+              activeRuleId={activeRuleId}
+              setActiveRuleId={setActiveRuleId}
+              selectedNode={selectedNode}
+              setSelectedNode={setSelectedNode}
+              rightPanelTab={rightPanelTab}
+              setRightPanelTab={setRightPanelTab}
+              onOpenJsonModal={(payload) => setJsonModalData(payload)}
+            />
+          </ReactFlowProvider>
         </div>
       </div>
 
-      {/* JSON Viewer Modal */}
+      {/* Step 6 & 7: Clean Graph JSON Viewer Modal */}
       {jsonModalData && (
         <div className="modal-backdrop" onClick={() => setJsonModalData(null)}>
           <div
@@ -972,59 +717,29 @@ function FlowCanvasContent() {
           >
             <div className="modal-header">
               <h3>Rule Compiler JSON Payload</h3>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setJsonModalData(null)}
-              >
+              <button className="modal-close-btn" onClick={() => setJsonModalData(null)}>
                 ✕
               </button>
             </div>
             <div className="modal-body">
               <p className="modal-desc">
-                Payload sent to <strong>POST / PUT /api/rules</strong>:
+                Clean serializable graph JSON ready for the Node.js Compiler & RxJS Stream Engine:
               </p>
               <pre className="json-code-block">
-                {JSON.stringify(
-                  {
-                    name: jsonModalData.name || "High Temperature Alert",
-                    description: jsonModalData.description || "",
-                    nodes: jsonModalData.nodes.map((n) => {
-                      const {
-                        onChange,
-                        onMetricChange,
-                        onOpChange,
-                        onConditionChange,
-                        onAlertChange,
-                        onDuplicate,
-                        ...cleanData
-                      } = n.data || {};
-                      return {
-                        id: n.id,
-                        type: n.type,
-                        position: n.position,
-                        data: cleanData
-                      };
-                    }),
-                    edges: jsonModalData.edges.map((e) => ({
-                      id: e.id,
-                      source: e.source,
-                      target: e.target,
-                      animated: e.animated ?? true,
-                      style: e.style
-                    }))
-                  },
-                  null,
-                  2
-                )}
+                {JSON.stringify(jsonModalData, null, 2)}
               </pre>
             </div>
             <div className="modal-footer">
               <button
-                type="button"
                 className="btn-secondary"
-                onClick={() => setJsonModalData(null)}
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(jsonModalData, null, 2));
+                  alert("JSON copied to clipboard!");
+                }}
               >
+                📋 Copy JSON
+              </button>
+              <button className="btn-secondary" onClick={() => setJsonModalData(null)}>
                 Close
               </button>
             </div>

@@ -29,14 +29,7 @@ const userSchema = new mongoose.Schema({
     enum: ["active", "inactive"],
     default: "active"
   },
-  lastLoginAt: {
-    type: Date
-  },
   createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
     type: Date,
     default: Date.now
   }
@@ -44,7 +37,6 @@ const userSchema = new mongoose.Schema({
 
 // Encrypt password using bcrypt before saving
 userSchema.pre('save', async function () {
-  this.updatedAt = Date.now();
   if (!this.isModified('password')) {
     return;
   }
