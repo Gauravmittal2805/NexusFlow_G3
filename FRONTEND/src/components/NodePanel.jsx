@@ -203,27 +203,31 @@ export default function NodePanel({
         </div>
       </div>
 
-      <div className="node-categories">
-        {NODE_CATEGORIES.map((category) => (
-          <div key={category.title} className="category-section">
-            <div className="category-header-row">
-              <h4 className="category-title">{category.title}</h4>
-              <span className={`category-badge ${category.badge.toLowerCase()}`}>
-                {category.badge}
-              </span>
-            </div>
-            <div className="category-items">
-              {category.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="draggable-node-item"
-                  onDragStart={(event) => onDragStart(event, item)}
-                  draggable
-                  title={`Drag ${item.label} to canvas`}
-                >
-                  <span className="item-icon">{item.icon}</span>
-                  <span className="item-label">{item.label}</span>
-                  <span className="drag-handle-dots">⋮⋮</span>
+      {activeTab === "nodes" ? (
+        <>
+          <div className="node-categories">
+            {NODE_CATEGORIES.map((category) => (
+              <div key={category.title} className="category-section">
+                <div className="category-header-row">
+                  <h4 className="category-title">{category.title}</h4>
+                  <span className={`category-badge ${category.badge.toLowerCase()}`}>
+                    {category.badge}
+                  </span>
+                </div>
+                <div className="category-items">
+                  {category.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="draggable-node-item"
+                      onDragStart={(event) => onDragStart(event, item)}
+                      draggable
+                      title={`Drag ${item.label} to canvas`}
+                    >
+                      <span className="item-icon">{item.icon}</span>
+                      <span className="item-label">{item.label}</span>
+                      <span className="drag-handle-dots">⋮⋮</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

@@ -673,22 +673,7 @@ export default function FlowBuilder() {
       {/* Step 1: 3-Column Product Layout (Library | Canvas | Config/Rules) */}
       <div className="flow-builder-workspace">
         {/* Left Node / Saved Rules Panel */}
-        <NodePanel
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          savedRules={savedRules}
-          loadingRules={loadingRules}
-          loadingRuleId={loadingRuleId}
-          deletingRuleId={deletingRuleId}
-          togglingRuleId={togglingRuleId}
-          selectedRuleId={selectedRuleId}
-          ruleTriggers={ruleTriggers}
-          onSelectRule={handleLoadRule}
-          onDeleteRule={handleDeleteRule}
-          onToggleRuleStatus={handleToggleRuleStatus}
-          onRefreshRules={fetchRules}
-          onNewRule={handleNewRule}
-        />
+        <NodePanel />
 
         {/* Center Flow Canvas */}
         <div className="flow-canvas-wrapper">
@@ -750,10 +735,3 @@ export default function FlowBuilder() {
   );
 }
 
-export default function FlowBuilder() {
-  return (
-    <ReactFlowProvider>
-      <FlowCanvasContent />
-    </ReactFlowProvider>
-  );
-}
