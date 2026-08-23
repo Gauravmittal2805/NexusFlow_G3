@@ -4,7 +4,7 @@ const { processTelemetry } = require('./ruleEngineService');
 
 // ─── Simulator config ────────────────────────────────────────────────────────
 
-const INTERVAL_MS = 8000; // emit every 2 seconds
+const INTERVAL_MS = 16000; // emit every 2 seconds
 
 /**
  * Each turbine has its own live state that drifts continuously.

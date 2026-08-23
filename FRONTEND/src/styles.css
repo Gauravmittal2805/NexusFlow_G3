@@ -3434,53 +3434,58 @@ button {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 14px;
+  padding: 14px 16px 14px 16px;
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
-  overflow: hidden;
+  overflow: visible;
+  border-left: 4px solid transparent;
 }
 
 .alert-item:hover {
   border-color: #cbd5e1;
+  border-left-color: transparent;
   background: #f8fafc;
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
 }
 
 .alert-item--unread {
-  background: #fdfdfd;
-  border-left: 4px solid #ef4444;
+  background: #fffafa;
+  border-left-color: #ef4444 !important;
+}
+
+.alert-item--unread:hover {
+  border-left-color: #ef4444 !important;
 }
 
 .alert-item--selected {
   border-color: #6366f1;
+  border-left-color: #6366f1 !important;
   background: #f8faff;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
+/* Remove the old absolute stripe — border-left handles it now */
 .unread-stripe {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 4px;
-  background: #ef4444;
+  display: none;
 }
 
 .alert-sev-badge {
-  font-size: 16px;
-  margin-top: 2px;
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  line-height: 1;
 }
 
 .alert-item-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -3488,12 +3493,18 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .alert-item-name {
   font-size: 14px;
   font-weight: 700;
   color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
 }
 
 .alert-item-time {
@@ -3507,6 +3518,7 @@ button {
   align-items: center;
   gap: 6px;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .alert-item-sensor {
@@ -3514,8 +3526,9 @@ button {
   font-weight: 700;
   color: #4f46e5;
   background: #eff6ff;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
+  font-size: 11px;
 }
 
 .alert-item-divider {
@@ -3932,7 +3945,9 @@ button {
 .alert-item-title-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
 .badge-new-dot {
@@ -3940,21 +3955,24 @@ button {
   color: white;
   font-size: 9px;
   font-weight: 800;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .alert-item-time-wrap {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .alert-exact-time {
   font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
+  color: #334155;
 }
 
 .alert-item-rel-time {
@@ -4815,8 +4833,6 @@ button {
 
 .alerts-page {
   padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .alerts-header {
