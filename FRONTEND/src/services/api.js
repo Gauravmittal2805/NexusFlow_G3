@@ -43,7 +43,25 @@ export const getRulesRequest = () =>
 export const getRuleByIdRequest = (id) =>
   api.get(`/api/rules/${id}`);
 
+export const updateRuleRequest = (id, payload) =>
+  api.put(`/api/rules/${id}`, payload);
+
+export const updateRuleStatusRequest = (id, status) =>
+  api.patch(`/api/rules/${id}/status`, { isActive: status });
+
 export const toggleRuleStatusRequest = (id) =>
   api.patch(`/api/rules/${id}/toggle`);
+
+export const deleteRuleRequest = (id) =>
+  api.delete(`/api/rules/${id}`);
+
+export const getAlertsRequest = () =>
+  api.get("/api/alerts");
+
+export const getAlertByIdRequest = (id) =>
+  api.get(`/api/alerts/${id}`);
+
+export const markAlertAsReadRequest = (id) =>
+  api.patch(`/api/alerts/${id}/read`);
 
 export default api;

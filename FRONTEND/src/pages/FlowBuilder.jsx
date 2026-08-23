@@ -672,7 +672,25 @@ export default function FlowBuilder() {
 
       {/* Step 1: 3-Column Product Layout (Library | Canvas | Config/Rules) */}
       <div className="flow-builder-workspace">
-        <NodePanel />
+        {/* Left Node / Saved Rules Panel */}
+        <NodePanel
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          savedRules={savedRules}
+          loadingRules={loadingRules}
+          loadingRuleId={loadingRuleId}
+          deletingRuleId={deletingRuleId}
+          togglingRuleId={togglingRuleId}
+          selectedRuleId={selectedRuleId}
+          ruleTriggers={ruleTriggers}
+          onSelectRule={handleLoadRule}
+          onDeleteRule={handleDeleteRule}
+          onToggleRuleStatus={handleToggleRuleStatus}
+          onRefreshRules={fetchRules}
+          onNewRule={handleNewRule}
+        />
+
+        {/* Center Flow Canvas */}
         <div className="flow-canvas-wrapper">
           <ReactFlowProvider>
             <FlowCanvas
@@ -693,7 +711,10 @@ export default function FlowBuilder() {
       {/* Step 6 & 7: Clean Graph JSON Viewer Modal */}
       {jsonModalData && (
         <div className="modal-backdrop" onClick={() => setJsonModalData(null)}>
-          <div className="modal-content json-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-content json-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <h3>Rule Compiler JSON Payload</h3>
               <button className="modal-close-btn" onClick={() => setJsonModalData(null)}>
@@ -726,5 +747,13 @@ export default function FlowBuilder() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FlowBuilder() {
+  return (
+    <ReactFlowProvider>
+      <FlowCanvasContent />
+    </ReactFlowProvider>
   );
 }

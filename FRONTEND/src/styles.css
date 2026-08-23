@@ -4244,6 +4244,795 @@ button {
   cursor: not-allowed;
 }
 
+/* ==========================================
+   RULE BUILDER HEADER & SAVED RULES STYLES
+   ========================================== */
+
+.rule-header-inputs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.rule-desc-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-desc-input-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.rule-desc-input {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  outline: none;
+  transition: all 0.2s ease;
+  min-width: 280px;
+}
+
+.rule-desc-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.active-rule-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #ddd6fe;
+}
+
+.active-rule-pill .clear-loaded-btn {
+  background: none;
+  border: none;
+  color: #6d28d9;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  line-height: 1;
+}
+
+/* Node Panel Tabs */
+.panel-tab-bar {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 4px 8px 0;
+  gap: 6px;
+  background: #f8fafc;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  margin: -16px -16px 14px -16px;
+}
+
+.panel-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.panel-tab-btn:hover {
+  color: #1e293b;
+  background: rgba(241, 245, 249, 0.6);
+}
+
+.panel-tab-btn.active {
+  color: #6366f1;
+  border-bottom: 2px solid #6366f1;
+  background: white;
+  font-weight: 700;
+}
+
+.panel-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+/* Saved Rules List in Panel */
+.saved-rules-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.saved-rules-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.saved-rules-toolbar h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.btn-icon-refresh {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-icon-refresh:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.saved-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.saved-rule-card {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  position: relative;
+}
+
+.saved-rule-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.saved-rule-card.active-selected {
+  background: #faf5ff;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.saved-rule-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.saved-rule-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.saved-rule-desc {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.saved-rule-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.saved-rule-meta {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.saved-rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-status-toggle {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.rule-status-toggle.active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.rule-status-toggle.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.rule-delete-icon-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.rule-delete-icon-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.saved-rules-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.saved-rules-empty .empty-icon {
+  font-size: 24px;
+}
+
+/* ==========================================================================
+   Rule Trigger Live Status & Timestamp Badges (Steps 4 & 5)
+   ========================================================================== */
+
+.saved-rule-card.card-triggered {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+  animation: triggerCardPulse 2s infinite ease-in-out;
+}
+
+@keyframes triggerCardPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.5);
+  }
+}
+
+.rule-trigger-status-box {
+  margin: 4px 0 2px;
+}
+
+.trigger-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* ⚠ Triggered just now state */
+.trigger-status-badge.just-now {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.trigger-status-badge.just-now .trigger-icon {
+  font-size: 12px;
+  color: #d97706;
+  animation: pulseIcon 1s infinite alternate;
+}
+
+@keyframes pulseIcon {
+  from { transform: scale(1); }
+  to { transform: scale(1.2); }
+}
+
+.trigger-time-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background: #fef08a;
+  color: #854d0e;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Historical Last Triggered state */
+.trigger-status-badge.historical {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.trigger-status-badge.historical .trigger-icon {
+  font-size: 11px;
+}
+
+/* Normal / No recent trigger state */
+.trigger-status-badge.normal {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px dashed #e2e8f0;
+  font-weight: 500;
+}
+
+.trigger-status-badge.normal .trigger-dot {
+  font-size: 8px;
+  color: #cbd5e1;
+}
+
+/* Header & Canvas trigger indicators */
+.active-rule-pill.triggered {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.live-rule-trigger-chip {
+  background: #f59e0b;
+  color: white;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  animation: pulseChip 1.5s infinite;
+}
+
+@keyframes pulseChip {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+
+.canvas-trigger-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.canvas-trigger-pill.just-now {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.canvas-trigger-pill.historical {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* =============================================
+   GLOBAL TOAST NOTIFICATIONS — Steps 6, 7, 10
+   ============================================= */
+
+.global-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 360px;
+  max-width: calc(100vw - 48px);
+}
+
+.global-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.14);
+  background: #fff;
+  border-left: 4px solid #6366f1;
+  animation: toast-slide-in 0.28s ease;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Rule trigger toast — warning amber */
+.global-toast.toast-rule_trigger {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+/* Connection lost toast — error red */
+.global-toast.toast-connection_lost {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+/* Connection restored toast — green */
+.global-toast.toast-connection_restored {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.toast-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toast-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+  line-height: 1.3;
+}
+
+.toast-message {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.toast-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.toast-action-btn {
+  background: #f59e0b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.toast-action-btn:hover {
+  background: #d97706;
+}
+
+.toast-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.toast-dismiss-btn:hover {
+  color: #475569;
+}
+
+/* =============================================
+   VIEW ALERT BUTTON in NodePanel — Step 7
+   ============================================= */
+
+.btn-view-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+}
+
+.btn-view-alert:hover {
+  background: #fde68a;
+  color: #b45309;
+}
+
+/* =============================================
+   ALERTS PAGE — Step 7
+   ============================================= */
+
+.alerts-page {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.alerts-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.alerts-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #172033;
+  margin: 0 0 4px;
+}
+
+.alerts-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.alerts-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.alerts-unread-badge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.alerts-filter-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1e40af;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.alerts-filter-clear {
+  background: transparent;
+  border: 1px solid #93c5fd;
+  color: #1e40af;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.alerts-filter-clear:hover {
+  background: #dbeafe;
+}
+
+.alerts-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #b91c1c;
+  font-size: 13px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.alerts-loading,
+.alerts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.15s;
+}
+
+.alert-card:hover {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+}
+
+.alert-card.unread {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+
+.alert-card.read {
+  opacity: 0.8;
+}
+
+.alert-card-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-severity-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alert-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-rule-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #172033;
+  margin: 0 0 4px;
+}
+
+.alert-message {
+  font-size: 12px;
+  color: #475569;
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.alert-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.alert-tag {
+  font-size: 11px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.alert-unread-tag {
+  background: #fef3c7;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.alert-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-mark-read {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-mark-read:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #172033;
+}
+
+.btn-mark-read:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.alert-read-label {
+  font-size: 11px;
+  color: #22c55e;
 .read-confirmation-text {
   display: flex;
   align-items: center;

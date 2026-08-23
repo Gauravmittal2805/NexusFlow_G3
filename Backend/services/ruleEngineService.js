@@ -45,6 +45,7 @@ const processTelemetry = async (telemetryData) => {
       // Step 9: Generate Rule Trigger Event 'rule:triggered'
       const triggerPayload = {
         ruleId: evalResult.ruleId,
+        ruleName: rule.name || 'Unnamed Rule',
         sensorId: evalResult.sensorId,
         timestamp: eventTimestamp,
       };
@@ -53,6 +54,15 @@ const processTelemetry = async (telemetryData) => {
 
       // Emit 'rule:triggered' event (Step 9)
       ruleEventEmitter.emit('rule:triggered', triggerPayload);
+
+      // Broadcast via Socket.IO to connected web clients (Step 2)
+      try {
+        const { getIo } = require('../websocket/telemetrySocket');
+        const io = getIo();
+        io.emit('rule:triggered', triggerPayload);
+      } catch (ioErr) {
+        // Socket.IO may not be initialized in test environments
+      }
 
       // Backwards-compatible emission for 'rule:matched'
       ruleEventEmitter.emit('rule:matched', {
