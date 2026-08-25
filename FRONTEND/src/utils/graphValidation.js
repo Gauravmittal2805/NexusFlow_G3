@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Graph Validation Utilities for NexusFlow Rule Builder
  * Verifies rule pipeline structure and enforces connection integrity rules.
  */
@@ -32,7 +32,7 @@ export function validateGraph(nodes, edges) {
 
   // Check 2: At least one Data Source
   const sensorNodes = nodes.filter(
-    (n) => n.type === "sensorNode" || (n.data && n.data.sensor)
+    (n) => n.type === "sensor" || n.type === "sensorNode" || Boolean(n.data?.sensor || n.data?.field || n.data?.sensorId)
   );
   if (sensorNodes.length === 0) {
     errors.push("Add a data source (e.g. Temperature, Pressure).");
@@ -40,10 +40,10 @@ export function validateGraph(nodes, edges) {
 
   // Check 3: At least one Action node
   const actionNodes = nodes.filter(
-    (n) => n.type === "alertNode" || (n.data && n.data.actionType)
+    (n) => n.type === "action" || n.type === "alertNode" || Boolean(n.data?.action || n.data?.actionType)
   );
   if (actionNodes.length === 0) {
-    errors.push("Add an action node (e.g. SMS Alert, Email Alert).");
+    errors.push("Add an action node (e.g. Alert, Notification, SMS).");
   }
 
   // If missing sources or actions, report immediately
@@ -197,10 +197,10 @@ export function validateConnectionWithReason(connection, nodes) {
     return { isValid: false, reason: "Source or Target node not found." };
   }
 
-  const isSourceAction = sourceNode.type === "alertNode" || Boolean(sourceNode.data?.actionType);
-  const isTargetSensor = targetNode.type === "sensorNode" || Boolean(targetNode.data?.sensor);
-  const isSourceSensor = sourceNode.type === "sensorNode" || Boolean(sourceNode.data?.sensor);
-  const isTargetAction = targetNode.type === "alertNode" || Boolean(targetNode.data?.actionType);
+  const isSourceAction = sourceNode.type === "action" || sourceNode.type === "alertNode" || Boolean(sourceNode.data?.action || sourceNode.data?.actionType);
+  const isTargetSensor = targetNode.type === "sensor" || targetNode.type === "sensorNode" || Boolean(targetNode.data?.sensor || targetNode.data?.field);
+  const isSourceSensor = sourceNode.type === "sensor" || sourceNode.type === "sensorNode" || Boolean(sourceNode.data?.sensor || sourceNode.data?.field);
+  const isTargetAction = targetNode.type === "action" || targetNode.type === "alertNode" || Boolean(targetNode.data?.action || targetNode.data?.actionType);
 
   // Rule 1: Action nodes cannot be data sources
   if (isSourceAction) {

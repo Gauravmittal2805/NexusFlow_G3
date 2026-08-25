@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import FlowBuilder from "./pages/FlowBuilder";
+import RuleBuilder from "./pages/RuleBuilder";
 import Sensors from "./pages/Sensors";
 import Alerts from "./pages/Alerts";
 
@@ -30,11 +31,14 @@ export default function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="sensors" element={<Sensors />} />
           <Route path="flow" element={<FlowBuilder />} />
+          <Route path="rules" element={<RuleBuilder />} />
+          <Route path="rule-builder" element={<RuleBuilder />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="analytics" element={<Placeholder title="Analytics" />} />
           <Route path="settings" element={<Placeholder title="Settings" />} />
         </Route>
       </Route>
+
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
