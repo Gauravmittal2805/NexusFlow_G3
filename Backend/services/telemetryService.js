@@ -2,6 +2,7 @@ const Telemetry = require('../models/Telemetry');
 const { getIo } = require('../websocket/telemetrySocket');
 const { validateTelemetry } = require('../utils/validateTelemetry');
 const { processTelemetry: evaluateRuleTelemetry } = require('./ruleEngineService');
+const { pushTelemetry } = require('../streams/telemetryStream');
 
 const processTelemetry = async (data) => {
     // Step 1: Validate incoming telemetry data
@@ -24,6 +25,10 @@ const processTelemetry = async (data) => {
 
     // Store it in MongoDB
     const savedTelemetry = await telemetry.save();
+    const telemetryObj = savedTelemetry.toObject ? savedTelemetry.toObject() : savedTelemetry;
+
+    // Push into RxJS Telemetry Stream
+    pushTelemetry(telemetryObj);
 
     // Broadcast through Socket.IO
     try {

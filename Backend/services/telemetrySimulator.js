@@ -1,6 +1,7 @@
 const Telemetry = require('../models/Telemetry');
 const { getIo } = require('../websocket/telemetrySocket');
 const { processTelemetry } = require('./ruleEngineService');
+const { pushTelemetry } = require('../streams/telemetryStream');
 
 // ─── Simulator config ────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ async function broadcastAndSave() {
         }
 
         // ── 2. Broadcast via Socket.IO → "telemetry:update" ──────────
-        io.emit('telemetry:update', {
+        const socketPayload = {
             sensorId:    payload.sensorId,
             timestamp:   payload.timestamp.toISOString(),
             temperature: payload.temperature,
@@ -126,9 +127,13 @@ async function broadcastAndSave() {
             humidity:    payload.humidity,
             rpm:         payload.rpm,
             status:      payload.status,
-        });
+        };
+        io.emit('telemetry:update', socketPayload);
 
-        // ── 3. Pass telemetry stream to active Rule Engine (Steps 6-10) ──
+        // ── 3. Push into RxJS Telemetry Stream ──────────────────────
+        pushTelemetry(socketPayload);
+
+        // ── 4. Pass telemetry stream to active Rule Engine (Steps 6-10) ──
         try {
             await processTelemetry(payload);
         } catch (engineErr) {
