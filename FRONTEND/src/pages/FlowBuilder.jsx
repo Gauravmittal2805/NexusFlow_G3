@@ -17,70 +17,57 @@ import NodePanel from "../components/NodePanel";
 import NodeConfigPanel from "../components/NodeConfigPanel";
 import SavedRulesPanel from "../components/SavedRulesPanel";
 
-import SensorNode from "../nodes/SensorNode";
-import MovingAverageNode from "../nodes/MovingAverageNode";
-import ConditionNode from "../nodes/ConditionNode";
-import AlertNode from "../nodes/AlertNode";
+import {
+  SensorNode,
+  ConditionNode,
+  MathNode,
+  ActionNode,
+  nodeTypes
+} from "../components/ruleNodes";
 
 import { validateGraph, validateConnectionWithReason } from "../utils/graphValidation";
 import { serializeGraph, deserializeGraph } from "../utils/graphSerializer";
 import { createRuleRequest, getRuleByIdRequest } from "../services/api";
 import { useSearchParams } from "react-router-dom";
 
-const nodeTypes = {
-  sensorNode: SensorNode,
-  processingNode: MovingAverageNode,
-  movingAverageNode: MovingAverageNode,
-  conditionNode: ConditionNode,
-  alertNode: AlertNode
-};
 
-// Canonical initial default pipeline (Temperature -> Moving Avg (5) -> Greater Than (80) -> SMS Alert)
+
+// Canonical initial default pipeline (Sensor -> Condition -> Action)
 const defaultInitialRule = {
   id: "rule-default-1",
   name: "High Turbine Temperature",
   nodes: [
     {
-      id: "1",
+      id: "sensor1",
       type: "sensor",
       position: { x: 260, y: 40 },
       data: {
-        sensor: "temperature",
-        sensorId: "T-001"
+        sensorId: "TURBINE-001",
+        field: "temperature"
       }
     },
     {
-      id: "2",
-      type: "movingAverage",
-      position: { x: 260, y: 190 },
-      data: {
-        window: 5,
-        operation: "movingAverage"
-      }
-    },
-    {
-      id: "3",
+      id: "condition1",
       type: "condition",
-      position: { x: 260, y: 340 },
+      position: { x: 260, y: 220 },
       data: {
         operator: ">",
         value: 80
       }
     },
     {
-      id: "4",
-      type: "sms",
-      position: { x: 260, y: 490 },
+      id: "action1",
+      type: "action",
+      position: { x: 260, y: 400 },
       data: {
-        phone: "+919876543210",
-        severity: "high"
+        action: "ALERT",
+        severity: "HIGH"
       }
     }
   ],
   edges: [
-    { id: "e1-2", source: "1", target: "2" },
-    { id: "e2-3", source: "2", target: "3" },
-    { id: "e3-4", source: "3", target: "4" }
+    { id: "e-sensor-condition", source: "sensor1", target: "condition1" },
+    { id: "e-condition-action", source: "condition1", target: "action1" }
   ]
 };
 
@@ -200,12 +187,14 @@ function FlowCanvas({
         ...n,
         data: {
           ...n.data,
+          onChange: handleUpdateNodeData,
+          onUpdate: handleUpdateNodeData,
           onDuplicate: handleDuplicateNode,
           onDelete: handleDeleteNode
         }
       }))
     );
-  }, [handleDuplicateNode, handleDeleteNode, setNodes]);
+  }, [handleUpdateNodeData, handleDuplicateNode, handleDeleteNode, setNodes]);
 
   // Track currently selected node
   const onNodeClick = useCallback(
@@ -265,6 +254,75 @@ function FlowCanvas({
     event.dataTransfer.dropEffect = "move";
   }, []);
 
+  const [addNodeMenuOpen, setAddNodeMenuOpen] = useState(false);
+
+  const handleAddNode = useCallback(
+    (nodeType, customData = {}) => {
+      const newId = `${nodeType}-${Date.now().toString().slice(-4)}`;
+      const position = {
+        x: 260 + (nodes.length % 4) * 30,
+        y: 60 + nodes.length * 80
+      };
+
+      let initialData = {};
+      if (nodeType === "sensor" || nodeType === "sensorNode") {
+        initialData = {
+          sensorId: customData.sensorId || "TURBINE-001",
+          field: customData.field || customData.sensor || "temperature",
+          sensor: customData.field || customData.sensor || "temperature",
+          label: customData.label || "Sensor (TURBINE-001)",
+          unit: customData.unit || "°C",
+          icon: customData.icon || "🌡️",
+          ...customData
+        };
+      } else if (nodeType === "condition" || nodeType === "conditionNode") {
+        initialData = {
+          operator: customData.operator || ">",
+          value: customData.value ?? 80,
+          field: customData.field || "temperature",
+          label: customData.label || "Condition (> 80)",
+          icon: customData.icon || ">",
+          ...customData
+        };
+      } else if (nodeType === "math" || nodeType === "mathNode" || nodeType === "movingAverageNode") {
+        initialData = {
+          operation: customData.operation || "movingAverage",
+          window: customData.window ?? 5,
+          label: customData.label || "Moving Average",
+          icon: customData.icon || "📈",
+          ...customData
+        };
+      } else if (nodeType === "action" || nodeType === "alertNode") {
+        initialData = {
+          action: (customData.action || customData.actionType || "ALERT").toUpperCase(),
+          actionType: (customData.action || customData.actionType || "ALERT").toUpperCase(),
+          severity: (customData.severity || "HIGH").toUpperCase(),
+          label: customData.label || "Alert Action",
+          icon: customData.icon || "🚨",
+          ...customData
+        };
+      }
+
+      const newNode = {
+        id: newId,
+        type: nodeType,
+        position,
+        data: {
+          ...initialData,
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode
+        }
+      };
+
+      setNodes((nds) => nds.concat(newNode));
+      setSelectedNode(newNode);
+      setRightPanelTab("config");
+      setAddNodeMenuOpen(false);
+      showToast("info", `Added ${newNode.data.label || nodeType} to canvas.`);
+    },
+    [nodes, setNodes, setSelectedNode, setRightPanelTab, handleDuplicateNode, handleDeleteNode]
+  );
+
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
@@ -278,7 +336,7 @@ function FlowCanvas({
         y: event.clientY
       });
 
-      const newId = `node-${Date.now()}`;
+      const newId = `${nodeData.nodeType || "node"}-${Date.now().toString().slice(-4)}`;
       const newNode = {
         id: newId,
         type: nodeData.nodeType,
@@ -480,6 +538,59 @@ function FlowCanvas({
         </div>
 
         <div className="canvas-actions">
+          {/* Step 7: + Add Node Quick Menu */}
+          <div className="add-node-dropdown-container">
+            <button
+              className="btn-canvas-action primary-accent"
+              onClick={() => setAddNodeMenuOpen((prev) => !prev)}
+              title="Add a new node to the canvas"
+            >
+              ➕ Add Node
+            </button>
+            {addNodeMenuOpen && (
+              <div className="add-node-menu" onClick={(e) => e.stopPropagation()}>
+                <div className="add-node-group-title">DATA SOURCES</div>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("sensor", { sensorId: "TURBINE-001", field: "temperature" })}
+                >
+                  <span className="node-icon">🔌</span>
+                  <span>Sensor</span>
+                </button>
+                <div className="add-node-group-title">OPERATIONS</div>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("condition", { operator: ">", value: 80, field: "temperature" })}
+                >
+                  <span className="node-icon">⚙️</span>
+                  <span>Condition</span>
+                </button>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("math", { operation: "movingAverage", window: 5 })}
+                >
+                  <span className="node-icon">📈</span>
+                  <span>Math</span>
+                </button>
+                <div className="add-node-group-title">ACTIONS</div>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("action", { action: "ALERT", severity: "HIGH" })}
+                >
+                  <span className="node-icon">🚨</span>
+                  <span>Alert</span>
+                </button>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("action", { action: "NOTIFICATION", severity: "MEDIUM" })}
+                >
+                  <span className="node-icon">🔔</span>
+                  <span>Notification</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             className="btn-canvas-action"
             onClick={() => onOpenJsonModal(serializeGraph(ruleName, nodes, edges, activeRuleId))}
@@ -549,13 +660,18 @@ function FlowCanvas({
             <MiniMap
               nodeColor={(node) => {
                 switch (node.type) {
+                  case "sensor":
                   case "sensorNode":
                     return "#3b82f6";
+                  case "math":
+                  case "mathNode":
                   case "movingAverageNode":
                   case "processingNode":
                     return "#8b5cf6";
+                  case "condition":
                   case "conditionNode":
                     return "#f59e0b";
+                  case "action":
                   case "alertNode":
                     return "#ef4444";
                   default:
