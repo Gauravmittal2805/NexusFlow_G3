@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 
 import SensorCard from "../components/SensorCard";
 import TelemetryChart from "../components/TelemetryChart";
+import RPMChart from "../components/RPMChart";
 import RecentAlerts from "../components/RecentAlerts";
 
 export default function Dashboard() {
@@ -187,7 +188,7 @@ export default function Dashboard() {
       </section>
 
 
-      {/* CHART + ALERTS */}
+      {/* CHART + ALERTS — row 1: Telemetry Trends | Recent Alerts */}
       <section className="dashboard-grid">
 
         <div className="panel">
@@ -223,6 +224,41 @@ export default function Dashboard() {
 
 
         <RecentAlerts />
+
+      </section>
+
+
+      {/* CHART ROW 2 — RPM Trend occupies the same left-column width as Telemetry Trends */}
+      <section className="dashboard-grid">
+
+        <div className="panel">
+
+          <div className="panel-header">
+
+            <div>
+              <span className="eyebrow">
+                Engine Metrics
+              </span>
+
+              <h2>
+                {activeSensorId}
+                {" "}
+                RPM Trend
+              </h2>
+            </div>
+
+            <span className="updated-label">
+              Real-time
+            </span>
+
+          </div>
+
+          <RPMChart data={history} />
+
+        </div>
+
+        {/* Empty right-column placeholder keeps the grid symmetric */}
+        <div />
 
       </section>
 
