@@ -17,12 +17,14 @@ export default function Dashboard() {
     setActiveSensorId,
     connectionStatus,
     connectionError,
+    isPaused,
+    togglePause,
   } = useTelemetry();
 
   const statusText = {
-    connected: "Live",
+    connected: isPaused ? "Paused" : "Live",
     reconnecting: "Reconnecting...",
-    disconnected: "Disconnected",
+    disconnected: "Connection lost",
   };
 
   return (
@@ -42,26 +44,57 @@ export default function Dashboard() {
 
         </div>
 
-        {/* CONNECTION STATUS */}
-        <div
-          className={`live-badge ${connectionStatus}`}
-        >
-          <span
-            className={
-              connectionStatus === "connected"
-                ? "live-dot"
-                : "offline-dot"
-            }
-          />
+        {/* CONNECTION STATUS & LIVE / PAUSE CONTROLS (Step 10 & Step 12) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={togglePause}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 12px",
+              borderRadius: "8px",
+              fontSize: "12px",
+              fontWeight: "600",
+              cursor: "pointer",
+              border: isPaused ? "1px solid #f59e0b" : "1px solid #e2e8f0",
+              backgroundColor: isPaused ? "#fef3c7" : "#fff",
+              color: isPaused ? "#b45309" : "#475569",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <span>{isPaused ? "▶ Resume" : "⏸ Pause Stream"}</span>
+          </button>
 
-          {statusText[connectionStatus]}
+          <div
+            className={`live-badge ${isPaused ? "reconnecting" : connectionStatus}`}
+          >
+            <span
+              className={
+                connectionStatus === "connected" && !isPaused
+                  ? "live-dot"
+                  : "offline-dot"
+              }
+            />
+
+            {statusText[connectionStatus]}
+          </div>
         </div>
 
       </section>
 
 
-      {/* CONNECTION ERROR */}
-      {connectionError && (
+      {/* CONNECTION WARNING (Step 12) */}
+      {connectionStatus === "disconnected" && (
+        <div className="connection-warning" style={{ backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", padding: "10px 16px", borderRadius: "8px", margin: "12px 0", fontSize: "13px" }}>
+          ⚠️ <strong>Connection lost. Waiting for reconnection...</strong>
+          <br />
+          Showing latest available cached telemetry history.
+        </div>
+      )}
+
+      {connectionError && connectionStatus !== "disconnected" && (
         <div className="connection-warning">
           ⚠️ {connectionError}
           <br />
@@ -218,6 +251,7 @@ export default function Dashboard() {
 
           <TelemetryChart
             data={history}
+            isPaused={isPaused}
           />
 
         </div>
@@ -253,7 +287,7 @@ export default function Dashboard() {
 
           </div>
 
-          <RPMChart data={history} />
+          <RPMChart data={history} isPaused={isPaused} />
 
         </div>
 
