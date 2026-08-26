@@ -5,42 +5,56 @@ import { formatTriggerTime } from "../context/TelemetryContext";
 const NODE_CATEGORIES = [
   {
     title: "DATA SOURCES",
-    badge: "Input",
+    badge: "Source",
     items: [
       {
-        id: "temp",
-        nodeType: "sensorNode",
-        label: "Temperature",
-        icon: "🌡️",
+        id: "sensor-generic",
+        nodeType: "sensor",
+        label: "Sensor",
+        icon: "🔌",
+        sensorId: "TURBINE-001",
+        field: "temperature",
         sensor: "temperature",
-        sensorId: "T-001",
         unit: "°C"
       },
       {
-        id: "pressure",
-        nodeType: "sensorNode",
-        label: "Pressure",
+        id: "temp-turbine",
+        nodeType: "sensor",
+        label: "Temperature (Turbine 1)",
+        icon: "🌡️",
+        sensorId: "TURBINE-001",
+        field: "temperature",
+        sensor: "temperature",
+        unit: "°C"
+      },
+      {
+        id: "pressure-boiler",
+        nodeType: "sensor",
+        label: "Pressure (Boiler 101)",
         icon: "⏲️",
+        sensorId: "BOILER-101",
+        field: "pressure",
         sensor: "pressure",
-        sensorId: "P-003",
         unit: "PSI"
       },
       {
-        id: "humidity",
-        nodeType: "sensorNode",
-        label: "Humidity",
+        id: "humidity-turbine",
+        nodeType: "sensor",
+        label: "Humidity (Turbine 2)",
         icon: "💧",
+        sensorId: "TURBINE-002",
+        field: "humidity",
         sensor: "humidity",
-        sensorId: "H-002",
         unit: "%"
       },
       {
-        id: "rpm",
-        nodeType: "sensorNode",
-        label: "RPM",
+        id: "rpm-turbine",
+        nodeType: "sensor",
+        label: "RPM (Turbine 3)",
         icon: "🔄",
+        sensorId: "TURBINE-003",
+        field: "rpm",
         sensor: "rpm",
-        sensorId: "R-004",
         unit: "RPM"
       }
     ]
@@ -50,33 +64,87 @@ const NODE_CATEGORIES = [
     badge: "Process",
     items: [
       {
-        id: "mavg",
-        nodeType: "movingAverageNode",
-        label: "Moving Avg",
+        id: "cond-gt",
+        nodeType: "condition",
+        label: "Condition (> 80)",
+        icon: ">",
+        operator: ">",
+        value: 80,
+        field: "temperature"
+      },
+      {
+        id: "cond-lt",
+        nodeType: "condition",
+        label: "Condition (< 20)",
+        icon: "<",
+        operator: "<",
+        value: 20,
+        field: "temperature"
+      },
+      {
+        id: "cond-gte",
+        nodeType: "condition",
+        label: "Condition (>= 90)",
+        icon: ">=",
+        operator: ">=",
+        value: 90,
+        field: "temperature"
+      },
+      {
+        id: "cond-lte",
+        nodeType: "condition",
+        label: "Condition (<= 40)",
+        icon: "<=",
+        operator: "<=",
+        value: 40,
+        field: "temperature"
+      },
+      {
+        id: "cond-eq",
+        nodeType: "condition",
+        label: "Condition (== 50)",
+        icon: "==",
+        operator: "==",
+        value: 50,
+        field: "temperature"
+      },
+      {
+        id: "cond-neq",
+        nodeType: "condition",
+        label: "Condition (!= 0)",
+        icon: "!=",
+        operator: "!=",
+        value: 0,
+        field: "temperature"
+      },
+      {
+        id: "math-mavg",
+        nodeType: "math",
+        label: "Math / Moving Avg (5)",
         icon: "📈",
         operation: "movingAverage",
         window: 5
       },
       {
-        id: "avg",
-        nodeType: "movingAverageNode",
-        label: "Average",
+        id: "math-avg",
+        nodeType: "math",
+        label: "Math / Average (10)",
         icon: "📊",
         operation: "average",
         window: 10
       },
       {
-        id: "min",
-        nodeType: "movingAverageNode",
-        label: "Minimum",
+        id: "math-min",
+        nodeType: "math",
+        label: "Math / Minimum (5)",
         icon: "⬇️",
         operation: "minimum",
         window: 5
       },
       {
-        id: "max",
-        nodeType: "movingAverageNode",
-        label: "Maximum",
+        id: "math-max",
+        nodeType: "math",
+        label: "Math / Maximum (5)",
         icon: "⬆️",
         operation: "maximum",
         window: 5
@@ -84,72 +152,44 @@ const NODE_CATEGORIES = [
     ]
   },
   {
-    title: "CONDITIONS",
-    badge: "Evaluate",
-    items: [
-      {
-        id: "gt",
-        nodeType: "conditionNode",
-        label: "Greater Than",
-        icon: ">",
-        operator: ">",
-        value: 80
-      },
-      {
-        id: "lt",
-        nodeType: "conditionNode",
-        label: "Less Than",
-        icon: "<",
-        operator: "<",
-        value: 20
-      },
-      {
-        id: "gte",
-        nodeType: "conditionNode",
-        label: "Greater Equal",
-        icon: ">=",
-        operator: ">=",
-        value: 90
-      },
-      {
-        id: "eq",
-        nodeType: "conditionNode",
-        label: "Equals",
-        icon: "=",
-        operator: "=",
-        value: 50
-      }
-    ]
-  },
-  {
     title: "ACTIONS",
-    badge: "Output",
+    badge: "Trigger",
     items: [
       {
-        id: "sms",
-        nodeType: "alertNode",
-        label: "SMS Alert",
-        icon: "📱",
-        actionType: "SMS",
-        phone: "+919876543210",
-        severity: "High"
-      },
-      {
-        id: "email",
-        nodeType: "alertNode",
-        label: "Email Alert",
-        icon: "✉️",
-        actionType: "Email",
-        email: "admin@nexusflow.io",
-        severity: "Medium"
-      },
-      {
-        id: "alert",
-        nodeType: "alertNode",
-        label: "System Alert",
+        id: "act-alert",
+        nodeType: "action",
+        label: "Alert Trigger",
         icon: "🚨",
-        actionType: "System",
-        severity: "Critical"
+        action: "ALERT",
+        actionType: "ALERT",
+        severity: "HIGH"
+      },
+      {
+        id: "act-notification",
+        nodeType: "action",
+        label: "Notification",
+        icon: "🔔",
+        action: "NOTIFICATION",
+        actionType: "NOTIFICATION",
+        severity: "MEDIUM"
+      },
+      {
+        id: "act-sms",
+        nodeType: "action",
+        label: "SMS Action",
+        icon: "📱",
+        action: "SMS",
+        actionType: "SMS",
+        severity: "HIGH"
+      },
+      {
+        id: "act-system",
+        nodeType: "action",
+        label: "System Log",
+        icon: "📋",
+        action: "SYSTEM",
+        actionType: "SYSTEM",
+        severity: "INFO"
       }
     ]
   }
@@ -158,6 +198,7 @@ const NODE_CATEGORIES = [
 export default function NodePanel({
   activeTab = "nodes",
   setActiveTab,
+  onAddNode,
   savedRules = [],
   loadingRules = false,
   loadingRuleId = null,
@@ -220,11 +261,13 @@ export default function NodePanel({
                       key={item.id}
                       className="draggable-node-item"
                       onDragStart={(event) => onDragStart(event, item)}
+                      onClick={() => onAddNode && onAddNode(item)}
                       draggable
-                      title={`Drag ${item.label} to canvas`}
+                      title={`Drag or click to add ${item.label} to canvas`}
                     >
                       <span className="item-icon">{item.icon}</span>
                       <span className="item-label">{item.label}</span>
+                      <span className="item-add-tag">+ Add</span>
                       <span className="drag-handle-dots">⋮⋮</span>
                     </div>
                   ))}

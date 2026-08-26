@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Graph Serializer & Deserializer for NexusFlow Rule Builder
  * Bridges React Flow UI representations with the clean Compiler JSON schema.
  */
@@ -22,31 +22,31 @@ export function serializeGraph(ruleName, nodes, edges, ruleId = null) {
     const nodeType = node.type || "sensorNode";
     const data = node.data || {};
 
-    if (nodeType === "sensorNode" || data.sensor) {
+    if (nodeType === "sensor" || nodeType === "sensorNode" || data.sensor || data.field) {
       base.type = "sensor";
       base.data = {
-        sensor: data.sensor || "temperature",
-        sensorId: data.sensorId || "T-001"
+        sensorId: data.sensorId || data.sensor_id || "TURBINE-001",
+        field: data.field || data.sensor || "temperature"
       };
-    } else if (nodeType === "movingAverageNode" || nodeType === "processingNode" || data.operation) {
-      base.type = data.operation === "average" ? "average" : "movingAverage";
-      base.data = {
-        window: Number(data.window ?? 5),
-        operation: data.operation || "movingAverage"
-      };
-    } else if (nodeType === "conditionNode" || data.operator !== undefined) {
+    } else if (nodeType === "condition" || nodeType === "conditionNode" || data.operator !== undefined) {
       base.type = "condition";
       base.data = {
         operator: data.operator || ">",
         value: Number(data.value ?? 80)
       };
-    } else if (nodeType === "alertNode" || data.actionType) {
-      const act = (data.actionType || "SMS").toLowerCase();
-      base.type = act === "email" ? "email" : act === "system" ? "system" : "sms";
+    } else if (nodeType === "math" || nodeType === "mathNode" || nodeType === "movingAverageNode" || nodeType === "processingNode" || data.operation) {
+      base.type = "math";
       base.data = {
-        severity: (data.severity || "High").toLowerCase(),
-        ...(act === "sms" ? { phone: data.phone || "+919876543210" } : {}),
-        ...(act === "email" ? { email: data.email || "admin@nexusflow.io" } : {})
+        operation: data.operation || "movingAverage",
+        window: Number(data.window ?? 5)
+      };
+    } else if (nodeType === "action" || nodeType === "alertNode" || data.action || data.actionType) {
+      const act = (data.action || data.actionType || "ALERT").toUpperCase();
+      const sev = (data.severity || "HIGH").toUpperCase();
+      base.type = "action";
+      base.data = {
+        action: act,
+        severity: sev
       };
     } else {
       base.type = nodeType;
@@ -91,8 +91,8 @@ export function deserializeGraph(ruleData, callbacks = {}) {
     const rawType = (node.type || "").toLowerCase();
 
     if (rawType === "sensor" || rawType === "sensornode") {
-      type = "sensorNode";
-      const metric = node.data?.sensor || "temperature";
+      type = "sensor";
+      const metric = node.data?.field || node.data?.sensor || "temperature";
       const metricLabels = {
         temperature: { label: "Temperature", icon: "🌡️", unit: "°C" },
         humidity: { label: "Humidity", icon: "💧", unit: "%" },
@@ -104,12 +104,13 @@ export function deserializeGraph(ruleData, callbacks = {}) {
         label: `${info.label} Sensor`,
         icon: info.icon,
         unit: info.unit,
+        field: metric,
         sensor: metric,
-        sensorId: node.data?.sensorId || "T-001",
+        sensorId: node.data?.sensorId || node.data?.sensor_id || "TURBINE-001",
         ...data
       };
-    } else if (rawType === "movingaverage" || rawType === "movingaveragenode" || rawType === "processingnode" || rawType === "average") {
-      type = "movingAverageNode";
+    } else if (rawType === "math" || rawType === "mathnode" || rawType === "movingaverage" || rawType === "movingaveragenode" || rawType === "processingnode" || rawType === "average") {
+      type = "math";
       const op = node.data?.operation || (rawType === "average" ? "average" : "movingAverage");
       data = {
         label: op === "average" ? "Average Window" : "Moving Average",
@@ -119,33 +120,37 @@ export function deserializeGraph(ruleData, callbacks = {}) {
         ...data
       };
     } else if (rawType === "condition" || rawType === "conditionnode") {
-      type = "conditionNode";
+      type = "condition";
       const op = node.data?.operator || ">";
       const opLabels = {
         ">": "Greater Than",
         "<": "Less Than",
         "=": "Equals",
+        "==": "Equals",
+        "!=": "Not Equals",
         ">=": "Greater or Equal",
         "<=": "Less or Equal"
       };
       data = {
-        label: opLabels[op] || "Greater Than",
+        label: opLabels[op] || "Condition",
         icon: op,
         operator: op,
+        field: node.data?.field || node.data?.sensor || "temperature",
         value: Number(node.data?.value ?? 80),
         ...data
       };
-    } else if (rawType === "sms" || rawType === "email" || rawType === "system" || rawType === "alertnode" || rawType === "alert") {
-      type = "alertNode";
-      const act = rawType === "email" ? "Email" : rawType === "system" ? "System" : "SMS";
-      const actIcons = { SMS: "📱", Email: "✉️", System: "🚨" };
+    } else if (rawType === "action" || rawType === "alert" || rawType === "notification" || rawType === "sms" || rawType === "email" || rawType === "system" || rawType === "alertnode") {
+      type = "action";
+      const act = (node.data?.action || node.data?.actionType || (rawType === "email" ? "EMAIL" : rawType === "system" ? "SYSTEM" : rawType === "notification" ? "NOTIFICATION" : "ALERT")).toUpperCase();
+      const actIcons = { ALERT: "🚨", NOTIFICATION: "🔔", SMS: "📱", EMAIL: "✉️", SYSTEM: "📋" };
       data = {
-        label: `${act} Alert`,
-        icon: actIcons[act] || "📱",
+        label: `${act} Action`,
+        icon: actIcons[act] || "🚨",
+        action: act,
         actionType: act,
         phone: node.data?.phone || "+919876543210",
         email: node.data?.email || "admin@nexusflow.io",
-        severity: node.data?.severity ? (node.data.severity.charAt(0).toUpperCase() + node.data.severity.slice(1)) : "High",
+        severity: node.data?.severity || "High",
         ...data
       };
     }

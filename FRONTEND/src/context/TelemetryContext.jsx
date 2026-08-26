@@ -34,14 +34,18 @@ export function TelemetryProvider({ children }) {
   const [telemetryBySensor, setTelemetryBySensor] =
     useState(initialTelemetry);
 
+  // History cap: keep the latest MAX_HISTORY_POINTS per sensor so the chart
+  // never grows unbounded in the browser (Step 14).
+  const MAX_HISTORY_POINTS = 50;
+
   const [historyBySensor, setHistoryBySensor] = useState({
     "TURBINE-001": [
-      { time: "10s", temperature: 72, pressure: 116, rpm: 1750 },
-      { time: "20s", temperature: 74, pressure: 118, rpm: 1780 },
-      { time: "30s", temperature: 76, pressure: 119, rpm: 1795 },
-      { time: "40s", temperature: 75, pressure: 121, rpm: 1805 },
-      { time: "50s", temperature: 78, pressure: 120, rpm: 1800 },
-      { time: "60s", temperature: 78.5, pressure: 120, rpm: 1800 },
+      { time: "10s", temperature: 72,   pressure: 116, rpm: 1750, humidity: 41 },
+      { time: "20s", temperature: 74,   pressure: 118, rpm: 1780, humidity: 42 },
+      { time: "30s", temperature: 76,   pressure: 119, rpm: 1795, humidity: 43 },
+      { time: "40s", temperature: 75,   pressure: 121, rpm: 1805, humidity: 42 },
+      { time: "50s", temperature: 78,   pressure: 120, rpm: 1800, humidity: 44 },
+      { time: "60s", temperature: 78.5, pressure: 120, rpm: 1800, humidity: 43 },
     ],
   });
 
@@ -180,6 +184,7 @@ export function TelemetryProvider({ children }) {
         temperature: data.temperature ?? null,
         pressure: data.pressure ?? null,
         rpm: data.rpm ?? null,
+        humidity: data.humidity ?? null,
       };
 
       return {
@@ -188,7 +193,7 @@ export function TelemetryProvider({ children }) {
         [data.sensorId]: [
           ...oldHistory,
           newPoint,
-        ].slice(-20),
+        ].slice(-MAX_HISTORY_POINTS),
       };
     });
   }, []);
