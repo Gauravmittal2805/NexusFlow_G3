@@ -287,6 +287,17 @@ module.exports = {
   SubscriptionRegistry,
   subscriptionRegistry,
 
+  // Stream Feed & Completion Helpers
+  push: pushTelemetry,
+  complete: () => {
+    subscriptionRegistry.unsubscribeAll();
+    telemetrySubject.complete();
+  },
+  completeStream: () => {
+    subscriptionRegistry.unsubscribeAll();
+    telemetrySubject.complete();
+  },
+
   // Standard RxJS operators for Member 2 convenience
   rxOperators: {
     filter,

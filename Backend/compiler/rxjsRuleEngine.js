@@ -92,7 +92,7 @@ async function handleMatch(rule, result) {
     `Severity: ${context.alertSeverity || 'HIGH'}`
   );
 
-  // Emit rule:triggered via Socket.IO
+  // Emit rule:triggered via Socket.IO (Step 2 payload contract)
   try {
     const { getIo } = require('../websocket/telemetrySocket');
     const io = getIo();
@@ -100,6 +100,10 @@ async function handleMatch(rule, result) {
       ruleId,
       ruleName,
       sensorId,
+      severity: context.alertSeverity || 'HIGH',
+      action: context.alertAction || 'NOTIFICATION',
+      field: conditionOutput?.output?.field || 'temperature',
+      value: conditionOutput?.output?.actual,
       timestamp: new Date().toISOString(),
     });
   } catch (_) {

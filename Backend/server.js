@@ -8,6 +8,9 @@ const { initWebSocket }  = require('./websocket/telemetrySocket');
 const { startSimulator, stopSimulator } = require('./services/telemetrySimulator');
 const { activateAll, deactivateAll }    = require('./compiler/rxjsRuleEngine');
 
+// ── Step 9: Rule Stream Manager — handles ruleId → Subscription lifecycle ─────
+const { cleanupOnShutdown: cleanupStreamManager } = require('./streams/ruleStreamManager');
+
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 5005;
@@ -46,6 +49,15 @@ server.listen(PORT, async () => {
 });
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
+// Step 9: Clean up all active rule subscriptions from both engines before exit
 
-process.on('SIGINT',  () => { deactivateAll(); stopSimulator(); process.exit(0); });
-process.on('SIGTERM', () => { deactivateAll(); stopSimulator(); process.exit(0); });
+function gracefulShutdown() {
+    deactivateAll();           // rxjsRuleEngine: stop compiled rule pipelines
+    cleanupStreamManager();    // ruleStreamManager: stop stream-manager subscriptions
+    stopSimulator();           // telemetrySimulator: stop data generation
+    process.exit(0);
+}
+
+process.on('SIGINT',  gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
