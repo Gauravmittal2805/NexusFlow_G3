@@ -28,7 +28,10 @@ export default function SensorNode({ id, data, selected }) {
   const handleSensorChange = (e) => {
     const val = e.target.value;
     if (data.onChange) {
-      data.onChange(id, { sensorId: val, sensor_id: val });
+      data.onChange(id, {
+        sensorId: val,
+        sensor_id: val
+      });
     }
   };
 
@@ -48,7 +51,7 @@ export default function SensorNode({ id, data, selected }) {
 
   return (
     <div className={`flow-custom-node sensor-node ${selected ? "is-selected" : ""}`}>
-      {/* Top Handle for flexible pipeline connections */}
+      {/* Top Handle */}
       <Handle type="target" position={Position.Top} className="flow-handle handle-top" />
 
       {/* Header */}
@@ -87,7 +90,7 @@ export default function SensorNode({ id, data, selected }) {
       {/* Content Form */}
       <div className="node-content">
         <div className="node-field-group">
-          <label className="node-label">Sensor</label>
+          <label className="node-label">Sensor ID</label>
           <div className="nodrag" onMouseDown={(e) => e.stopPropagation()}>
             <select
               className="node-select"
@@ -96,7 +99,7 @@ export default function SensorNode({ id, data, selected }) {
             >
               {SENSOR_OPTIONS.map((opt) => (
                 <option key={opt.id} value={opt.id}>
-                  {opt.id}
+                  {opt.name}
                 </option>
               ))}
               {!SENSOR_OPTIONS.some((o) => o.id === currentSensorId) && (

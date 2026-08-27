@@ -1,10 +1,22 @@
-﻿import React from "react";
+import React from "react";
 
 const SENSOR_METRICS = [
-  { key: "temperature", label: "Temperature", icon: "🌡️", unit: "°C", defaultId: "T-001" },
-  { key: "humidity", label: "Humidity", icon: "💧", unit: "%", defaultId: "H-002" },
-  { key: "pressure", label: "Pressure", icon: "⏲️", unit: "PSI", defaultId: "P-003" },
-  { key: "rpm", label: "RPM", icon: "🔄", unit: "RPM", defaultId: "R-004" }
+  { key: "temperature", label: "Temperature", icon: "🌡️", unit: "°C" },
+  { key: "humidity", label: "Humidity", icon: "💧", unit: "%" },
+  { key: "pressure", label: "Pressure", icon: "⏲️", unit: "PSI" },
+  { key: "rpm", label: "RPM", icon: "🔄", unit: "RPM" }
+];
+
+const SENSOR_PRESETS = [
+  "TURBINE-001",
+  "TURBINE-002",
+  "TURBINE-003",
+  "BOILER-101",
+  "CHILLER-201",
+  "T-001",
+  "P-003",
+  "H-002",
+  "R-004"
 ];
 
 const PROCESSING_OPS = [
@@ -17,15 +29,26 @@ const PROCESSING_OPS = [
 const CONDITION_OPERATORS = [
   { key: ">", label: "Greater Than (>)", icon: ">" },
   { key: "<", label: "Less Than (<)", icon: "<" },
-  { key: "=", label: "Equals (=)", icon: "=" },
   { key: ">=", label: "Greater or Equal (>=)", icon: ">=" },
-  { key: "<=", label: "Less or Equal (<=)", icon: "<=" }
+  { key: "<=", label: "Less or Equal (<=)", icon: "<=" },
+  { key: "==", label: "Equals (==)", icon: "==" },
+  { key: "!=", label: "Not Equals (!=)", icon: "!=" }
 ];
 
 const ALERT_ACTIONS = [
+  { key: "ALERT", label: "Alert", icon: "🚨" },
+  { key: "NOTIFICATION", label: "Notification", icon: "🔔" },
   { key: "SMS", label: "SMS Alert", icon: "📱" },
-  { key: "Email", label: "Email Alert", icon: "✉️" },
-  { key: "System", label: "System Alert", icon: "🚨" }
+  { key: "EMAIL", label: "Email Alert", icon: "✉️" },
+  { key: "SYSTEM", label: "System Log", icon: "📋" }
+];
+
+const SEVERITY_LEVELS = [
+  { key: "CRITICAL", label: "Critical", icon: "🔴" },
+  { key: "HIGH", label: "High", icon: "🟠" },
+  { key: "MEDIUM", label: "Medium", icon: "🟡" },
+  { key: "LOW", label: "Low", icon: "🔵" },
+  { key: "INFO", label: "Info", icon: "⚪" }
 ];
 
 export default function NodeConfigPanel({
@@ -43,10 +66,10 @@ export default function NodeConfigPanel({
           <h3>Node Configuration</h3>
           <p>Click on any node in the Flow Canvas to inspect and fine-tune its parameters.</p>
           <div className="config-hints">
-            <div className="hint-pill">🌡️ Data Sources</div>
+            <div className="hint-pill">🔌 Data Sources</div>
+            <div className="hint-pill">⚙️ Conditions</div>
+            <div className="hint-pill">🚨 Actions</div>
             <div className="hint-pill">📈 Operations</div>
-            <div className="hint-pill">⚖️ Conditions</div>
-            <div className="hint-pill">📱 Actions</div>
           </div>
         </div>
       </aside>
@@ -54,19 +77,30 @@ export default function NodeConfigPanel({
   }
 
   const { id, type, data = {} } = selectedNode;
-  const isSensor = type === "sensorNode" || Boolean(data.sensor);
-  const isProcessing = type === "movingAverageNode" || type === "processingNode" || Boolean(data.operation);
-  const isCondition = type === "conditionNode" || data.operator !== undefined;
-  const isAlert = type === "alertNode" || Boolean(data.actionType);
+  const rawType = (type || "").toLowerCase();
+
+  const isSensor = rawType === "sensor" || rawType === "sensornode";
+  const isCondition = rawType === "condition" || rawType === "conditionnode";
+  const isAlert =
+    rawType === "action" ||
+    rawType === "alert" ||
+    rawType === "alertnode" ||
+    rawType === "notification";
+  const isProcessing =
+    rawType === "math" ||
+    rawType === "mathnode" ||
+    rawType === "movingaverage" ||
+    rawType === "movingaveragenode" ||
+    rawType === "processingnode";
 
   const handleMetricChange = (metricKey) => {
     const config = SENSOR_METRICS.find((m) => m.key === metricKey) || SENSOR_METRICS[0];
     onUpdateNodeData(id, {
+      field: metricKey,
       sensor: metricKey,
       label: `${config.label} Sensor`,
       icon: config.icon,
-      unit: config.unit,
-      sensorId: data.sensorId || config.defaultId
+      unit: config.unit
     });
   };
 
@@ -81,10 +115,9 @@ export default function NodeConfigPanel({
   };
 
   const handleOperatorChange = (op) => {
-    const config = CONDITION_OPERATORS.find((c) => c.key === op) || CONDITION_OPERATORS[0];
     onUpdateNodeData(id, {
       operator: op,
-      label: config.label.split(" (")[0],
+      label: `Condition (${op} ${data.value ?? 80})`,
       icon: op
     });
   };
@@ -92,8 +125,9 @@ export default function NodeConfigPanel({
   const handleActionTypeChange = (actionType) => {
     const config = ALERT_ACTIONS.find((a) => a.key === actionType) || ALERT_ACTIONS[0];
     onUpdateNodeData(id, {
-      actionType,
-      label: config.label,
+      action: actionType,
+      actionType: actionType,
+      label: `${config.label} Action`,
       icon: config.icon
     });
   };
@@ -132,13 +166,42 @@ export default function NodeConfigPanel({
             <h4 className="config-section-title">SENSOR PARAMETERS</h4>
 
             <div className="form-group">
-              <label className="form-label">Telemetry Metric</label>
+              <label className="form-label">Hardware Sensor ID</label>
+              <input
+                type="text"
+                className="form-input"
+                value={data.sensorId || data.sensor_id || "TURBINE-001"}
+                onChange={(e) => {
+                  handleGenericChange("sensorId", e.target.value);
+                  handleGenericChange("sensor_id", e.target.value);
+                }}
+                placeholder="e.g. TURBINE-001"
+              />
+              <div className="preset-buttons" style={{ marginTop: "6px" }}>
+                {SENSOR_PRESETS.slice(0, 5).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`preset-btn ${(data.sensorId || "TURBINE-001") === preset ? "active" : ""}`}
+                    onClick={() => {
+                      handleGenericChange("sensorId", preset);
+                      handleGenericChange("sensor_id", preset);
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Telemetry Field</label>
               <div className="pill-grid">
                 {SENSOR_METRICS.map((m) => (
                   <button
                     key={m.key}
                     type="button"
-                    className={`pill-option ${(data.sensor || "temperature") === m.key ? "active" : ""}`}
+                    className={`pill-option ${(data.field || data.sensor || "temperature") === m.key ? "active" : ""}`}
                     onClick={() => handleMetricChange(m.key)}
                   >
                     <span>{m.icon}</span>
@@ -149,26 +212,115 @@ export default function NodeConfigPanel({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Hardware Sensor ID</label>
-              <input
-                type="text"
-                className="form-input"
-                value={data.sensorId || "T-001"}
-                onChange={(e) => handleGenericChange("sensorId", e.target.value)}
-                placeholder="e.g. TURBINE-001"
-              />
-            </div>
-
-            <div className="form-group">
               <label className="form-label">Engineering Unit</label>
               <div className="read-only-badge">
-                {data.unit || SENSOR_METRICS.find((m) => m.key === (data.sensor || "temperature"))?.unit || "°C"}
+                {data.unit || SENSOR_METRICS.find((m) => m.key === (data.field || "temperature"))?.unit || "°C"}
               </div>
             </div>
           </div>
         )}
 
-        {/* ─── Processing / Moving Average Configuration ─── */}
+        {/* ─── Condition Node Configuration ─── */}
+        {isCondition && (
+          <div className="config-section">
+            <h4 className="config-section-title">EVALUATION THRESHOLD</h4>
+
+            <div className="form-group">
+              <label className="form-label">Comparison Operator</label>
+              <div className="operator-btn-group">
+                {CONDITION_OPERATORS.map((op) => (
+                  <button
+                    key={op.key}
+                    type="button"
+                    className={`op-btn ${(data.operator || ">") === op.key ? "active" : ""}`}
+                    onClick={() => handleOperatorChange(op.key)}
+                    title={op.label}
+                  >
+                    {op.key}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Threshold Value</label>
+              <input
+                type="number"
+                step="any"
+                className="form-input"
+                value={data.value ?? 80}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                  handleGenericChange("value", val);
+                  handleGenericChange("label", `Condition (${data.operator || ">"} ${val})`);
+                }}
+                placeholder="e.g. 80"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Quick Presets</label>
+              <div className="preset-buttons">
+                {[50, 75, 80, 85, 100, 120].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`preset-btn ${data.value === preset ? "active" : ""}`}
+                    onClick={() => {
+                      handleGenericChange("value", preset);
+                      handleGenericChange("label", `Condition (${data.operator || ">"} ${preset})`);
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Action Node Configuration ─── */}
+        {isAlert && (
+          <div className="config-section">
+            <h4 className="config-section-title">ACTION DISPATCH</h4>
+
+            <div className="form-group">
+              <label className="form-label">Action Channel</label>
+              <div className="pill-grid">
+                {ALERT_ACTIONS.map((act) => (
+                  <button
+                    key={act.key}
+                    type="button"
+                    className={`pill-option ${(data.action || data.actionType || "ALERT").toUpperCase() === act.key ? "active" : ""}`}
+                    onClick={() => handleActionTypeChange(act.key)}
+                  >
+                    <span>{act.icon}</span>
+                    <span>{act.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Severity Level</label>
+              <div className="pill-grid">
+                {SEVERITY_LEVELS.map((sev) => (
+                  <button
+                    key={sev.key}
+                    type="button"
+                    className={`pill-option ${(data.severity || "HIGH").toUpperCase() === sev.key ? "active" : ""}`}
+                    onClick={() => handleGenericChange("severity", sev.key)}
+                  >
+                    <span>{sev.icon}</span>
+                    <span>{sev.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Math / Processing Node Configuration ─── */}
         {isProcessing && (
           <div className="config-section">
             <h4 className="config-section-title">OPERATION PARAMETERS</h4>
@@ -216,123 +368,6 @@ export default function NodeConfigPanel({
                   +
                 </button>
               </div>
-              <p className="form-hint">Averages the last {data.window ?? 5} consecutive telemetry readings.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Condition Node Configuration ─── */}
-        {isCondition && (
-          <div className="config-section">
-            <h4 className="config-section-title">EVALUATION THRESHOLD</h4>
-
-            <div className="form-group">
-              <label className="form-label">Comparison Operator</label>
-              <div className="operator-btn-group">
-                {CONDITION_OPERATORS.map((op) => (
-                  <button
-                    key={op.key}
-                    type="button"
-                    className={`op-btn ${(data.operator || ">") === op.key ? "active" : ""}`}
-                    onClick={() => handleOperatorChange(op.key)}
-                    title={op.label}
-                  >
-                    {op.key}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Threshold Value</label>
-              <input
-                type="number"
-                step="any"
-                className="form-input"
-                value={data.value ?? 80}
-                onChange={(e) => handleGenericChange("value", Number(e.target.value))}
-                placeholder="e.g. 80"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Quick Presets</label>
-              <div className="preset-buttons">
-                {[50, 75, 80, 85, 100, 120].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`preset-btn ${data.value === preset ? "active" : ""}`}
-                    onClick={() => handleGenericChange("value", preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Alert Node Configuration ─── */}
-        {isAlert && (
-          <div className="config-section">
-            <h4 className="config-section-title">ACTION DISPATCH</h4>
-
-            <div className="form-group">
-              <label className="form-label">Notification Channel</label>
-              <div className="pill-grid">
-                {ALERT_ACTIONS.map((act) => (
-                  <button
-                    key={act.key}
-                    type="button"
-                    className={`pill-option ${(data.actionType || "SMS") === act.key ? "active" : ""}`}
-                    onClick={() => handleActionTypeChange(act.key)}
-                  >
-                    <span>{act.icon}</span>
-                    <span>{act.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {(data.actionType || "SMS") === "SMS" && (
-              <div className="form-group">
-                <label className="form-label">Recipient Phone Number</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={data.phone || "+919876543210"}
-                  onChange={(e) => handleGenericChange("phone", e.target.value)}
-                  placeholder="+919876543210"
-                />
-              </div>
-            )}
-
-            {(data.actionType || "SMS") === "Email" && (
-              <div className="form-group">
-                <label className="form-label">Recipient Email</label>
-                <input
-                  type="email"
-                  className="form-input"
-                  value={data.email || "admin@nexusflow.io"}
-                  onChange={(e) => handleGenericChange("email", e.target.value)}
-                  placeholder="admin@nexusflow.io"
-                />
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label">Severity Level</label>
-              <select
-                className="form-select"
-                value={data.severity || "High"}
-                onChange={(e) => handleGenericChange("severity", e.target.value)}
-              >
-                <option value="Critical">🔴 Critical Alert</option>
-                <option value="High">🟠 High Priority</option>
-                <option value="Medium">🟡 Medium Priority</option>
-                <option value="Info">🔵 Informational</option>
-              </select>
             </div>
           </div>
         )}

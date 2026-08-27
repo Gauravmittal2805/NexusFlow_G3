@@ -10,36 +10,29 @@ const OPERATOR_OPTIONS = [
   { value: "!=", label: "!= (Not Equals)" }
 ];
 
-const FIELD_OPTIONS = [
-  { key: "temperature", label: "Temperature" },
-  { key: "pressure", label: "Pressure" },
-  { key: "humidity", label: "Humidity" },
-  { key: "rpm", label: "RPM" }
-];
-
 export default function ConditionNode({ id, data, selected }) {
-  const currentField = (data.field || data.sensor || "temperature").toLowerCase();
   const currentOp = data.operator || ">";
   const currentValue = data.value !== undefined ? data.value : 80;
-
-  const handleFieldChange = (e) => {
-    const val = e.target.value;
-    if (data.onChange) {
-      data.onChange(id, { field: val, sensor: val });
-    }
-  };
 
   const handleOperatorChange = (e) => {
     const val = e.target.value;
     if (data.onChange) {
-      data.onChange(id, { operator: val });
+      data.onChange(id, {
+        operator: val,
+        label: `Condition (${val} ${currentValue})`,
+        icon: val
+      });
     }
   };
 
   const handleValueChange = (e) => {
-    const val = e.target.value === "" ? "" : Number(e.target.value);
+    const raw = e.target.value;
+    const val = raw === "" ? "" : Number(raw);
     if (data.onChange) {
-      data.onChange(id, { value: val });
+      data.onChange(id, {
+        value: val,
+        label: `Condition (${currentOp} ${raw})`
+      });
     }
   };
 
@@ -51,10 +44,10 @@ export default function ConditionNode({ id, data, selected }) {
       {/* Header */}
       <div className="node-header">
         <div className="node-header-left">
-          <span className="node-icon condition-icon">{data.icon || "⚙"}</span>
+          <span className="node-icon condition-icon">{data.icon || currentOp || "⚙"}</span>
           <div>
             <span className="node-category-tag">CONDITION</span>
-            <span className="node-title">{data.label || "Condition"}</span>
+            <span className="node-title">{data.label || `Condition (${currentOp} ${currentValue})`}</span>
           </div>
         </div>
         <div className="node-header-actions nodrag" onMouseDown={(e) => e.stopPropagation()}>
@@ -83,23 +76,6 @@ export default function ConditionNode({ id, data, selected }) {
 
       {/* Content Form */}
       <div className="node-content">
-        <div className="node-field-group">
-          <label className="node-label">Field</label>
-          <div className="nodrag" onMouseDown={(e) => e.stopPropagation()}>
-            <select
-              className="node-select"
-              value={currentField}
-              onChange={handleFieldChange}
-            >
-              {FIELD_OPTIONS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         <div className="node-field-group">
           <label className="node-label">Operator</label>
           <div className="nodrag" onMouseDown={(e) => e.stopPropagation()}>
