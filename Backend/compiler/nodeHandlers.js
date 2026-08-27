@@ -412,6 +412,8 @@ const NODE_HANDLERS = {
   mathNode:      mathHandler,
   alert:         alertHandler,
   alertNode:     alertHandler,
+  action:        alertHandler,
+  actionNode:    alertHandler,
   filter:        filterHandler,
 };
 

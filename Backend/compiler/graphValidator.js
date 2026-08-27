@@ -8,6 +8,8 @@ const VALID_NODE_TYPES = new Set([
   'mathNode',
   'alert',
   'alertNode',
+  'action',
+  'actionNode',
   'filter',     // stream-windowing / data-filtering (stub; no backend handler yet)
 ]);
 
@@ -19,7 +21,7 @@ const NODE_CATEGORY = {
   sensor:    (type) => type === 'sensor'    || type === 'sensorNode',
   condition: (type) => type === 'condition' || type === 'conditionNode',
   math:      (type) => type === 'math'      || type === 'mathNode',
-  alert:     (type) => type === 'alert'     || type === 'alertNode',
+  alert:     (type) => type === 'alert'     || type === 'alertNode' || type === 'action' || type === 'actionNode',
 };
 
 /**

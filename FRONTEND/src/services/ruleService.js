@@ -39,10 +39,16 @@ export const toggleRuleStatus = (id) => {
   return api.patch(`/api/rules/${id}/toggle`);
 };
 
+// Step 9: Refresh a rule's current state from backend
+export const refreshRule = (id) => {
+  return api.get(`/api/rules/${id}`);
+};
+
 export default {
   createRule,
   getRules,
   getRuleById,
+  refreshRule,
   updateRule,
   updateRuleStatus,
   deleteRule,

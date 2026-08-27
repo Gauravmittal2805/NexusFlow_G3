@@ -1,4 +1,6 @@
 const Rule = require('../models/Rule');
+const { validateGraph } = require('../compiler/graphValidator');
+const { startRule, stopRule, restartRule } = require('../compiler/rxjsRuleEngine');
 
 /**
  * Helper function to validate React Flow graph rule structure
@@ -43,15 +45,25 @@ const validateRuleInput = (body) => {
 // @access  Private
 const createRule = async (req, res) => {
   try {
-    const validationError = validateRuleInput(req.body);
-    if (validationError) {
+    const inputError = validateRuleInput(req.body);
+    if (inputError) {
       return res.status(400).json({
         success: false,
-        message: validationError,
+        message: inputError,
       });
     }
 
     const { name, description, nodes, edges, isActive } = req.body;
+
+    // Validate graph completeness (Sensor, Condition, Action/Alert)
+    const graphValidation = validateGraph({ nodes, edges });
+    if (!graphValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: `Complete the rule before saving: ${graphValidation.errors[0] || 'Invalid rule graph'}`,
+        errors: graphValidation.errors,
+      });
+    }
 
     const rule = await Rule.create({
       name: name.trim(),
@@ -62,9 +74,20 @@ const createRule = async (req, res) => {
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
 
+    let compiled = false;
+    let compilationMessage = 'Rule saved';
+    if (rule.isActive) {
+      compiled = startRule(rule);
+      compilationMessage = compiled
+        ? 'Rule compiled and running successfully'
+        : 'Rule saved, compilation pending';
+    }
+
     return res.status(201).json({
       success: true,
-      message: 'Rule created successfully',
+      message: 'Rule saved successfully',
+      compiled,
+      compilationMessage,
       rule,
     });
   } catch (error) {
@@ -164,6 +187,18 @@ const updateRule = async (req, res) => {
           message: validationError,
         });
       }
+
+      const graphValidation = validateGraph({
+        nodes: payloadToValidate.nodes,
+        edges: payloadToValidate.edges,
+      });
+      if (!graphValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: `Complete the rule before saving: ${graphValidation.errors[0] || 'Invalid rule graph'}`,
+          errors: graphValidation.errors,
+        });
+      }
     }
 
     if (name !== undefined) rule.name = name.trim();
@@ -174,9 +209,23 @@ const updateRule = async (req, res) => {
 
     await rule.save();
 
+    let compiled = false;
+    let compilationMessage = 'Rule saved';
+    if (rule.isActive) {
+      compiled = restartRule(rule);
+      compilationMessage = compiled
+        ? 'Rule compiled and running successfully'
+        : 'Rule saved, compilation failed';
+    } else {
+      stopRule(rule._id ? String(rule._id) : rule.id);
+      compilationMessage = 'Rule saved (Inactive)';
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'Rule updated successfully',
+      message: 'Rule saved successfully',
+      compiled,
+      compilationMessage,
       rule,
     });
   } catch (error) {
@@ -209,6 +258,8 @@ const deleteRule = async (req, res) => {
         message: 'Rule not found',
       });
     }
+
+    stopRule(rule._id ? String(rule._id) : rule.id);
 
     return res.status(200).json({
       success: true,
@@ -256,6 +307,12 @@ const updateRuleStatus = async (req, res) => {
     rule.isActive = Boolean(isActive);
     await rule.save();
 
+    if (rule.isActive) {
+      startRule(rule);
+    } else {
+      stopRule(rule._id ? String(rule._id) : rule.id);
+    }
+
     const actionText = rule.isActive ? 'enabled' : 'disabled';
     return res.status(200).json({
       success: true,
@@ -295,6 +352,12 @@ const toggleRuleStatus = async (req, res) => {
 
     rule.isActive = !rule.isActive;
     await rule.save();
+
+    if (rule.isActive) {
+      startRule(rule);
+    } else {
+      stopRule(rule._id ? String(rule._id) : rule.id);
+    }
 
     return res.status(200).json({
       success: true,

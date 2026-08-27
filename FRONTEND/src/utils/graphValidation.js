@@ -321,17 +321,93 @@ export function validateGraphStructure(nodes = [], edges = []) {
 }
 
 /**
+ * Returns a checklist status for Rule completeness:
+ * ✓ Sensor exists
+ * ✓ Condition exists
+ * ✓ Action exists
+ * ✓ Nodes connected
+ * ✓ Node configuration complete
+ */
+export function getValidationChecklist(nodes = [], edges = []) {
+  const sensorNodes = (nodes || []).filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return t === "sensor" || t === "sensornode";
+  });
+
+  const conditionNodes = (nodes || []).filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return t === "condition" || t === "conditionnode";
+  });
+
+  const actionNodes = (nodes || []).filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return (
+      t === "action" ||
+      t === "alert" ||
+      t === "alertnode" ||
+      t === "notification"
+    );
+  });
+
+  const hasSensor = sensorNodes.length > 0;
+  const hasCondition = conditionNodes.length > 0;
+  const hasAction = actionNodes.length > 0;
+
+  let nodesConnected = false;
+  if (nodes.length >= 2 && edges.length >= 1) {
+    const outgoing = {};
+    const incoming = {};
+    nodes.forEach((n) => {
+      outgoing[n.id] = [];
+      incoming[n.id] = [];
+    });
+    edges.forEach((e) => {
+      if (outgoing[e.source]) outgoing[e.source].push(e.target);
+      if (incoming[e.target]) incoming[e.target].push(e.source);
+    });
+    const unconnected = nodes.filter((n) => {
+      const hasOut = outgoing[n.id] && outgoing[n.id].length > 0;
+      const hasIn = incoming[n.id] && incoming[n.id].length > 0;
+      return !hasOut && !hasIn;
+    });
+    nodesConnected = unconnected.length === 0;
+  } else if (nodes.length === 1) {
+    nodesConnected = false;
+  }
+
+  const configCheck = validateNodeConfig(nodes);
+  const configComplete = configCheck.valid;
+
+  const isComplete = hasSensor && hasCondition && hasAction && nodesConnected && configComplete;
+
+  return {
+    isComplete,
+    hasSensor,
+    hasCondition,
+    hasAction,
+    nodesConnected,
+    configComplete,
+    configErrors: configCheck.errors,
+  };
+}
+
+/**
  * Full pre-save validation combining graph structure and node configuration checks.
  *
  * @param {Array} nodes - React Flow nodes
  * @param {Array} edges - React Flow edges
- * @returns {{ valid: boolean, message: string, errors: string[] }}
+ * @returns {{ valid: boolean, message: string, headerMessage: string, errors: string[] }}
  */
 export function validateGraph(nodes = [], edges = []) {
   // 1. Structural Validation (at least one node, types, connectivity, DAG, Sensor -> Action)
   const structureResult = validateGraphStructure(nodes, edges);
   if (!structureResult.valid) {
-    return structureResult;
+    return {
+      valid: false,
+      headerMessage: "⚠ Complete the rule before saving.",
+      message: `⚠ Complete the rule before saving: ${structureResult.message}`,
+      errors: structureResult.errors
+    };
   }
 
   // 2. Node Configuration Validation (non-blank sensorId, field, operator, value, action, etc.)
@@ -339,13 +415,15 @@ export function validateGraph(nodes = [], edges = []) {
   if (!configResult.valid) {
     return {
       valid: false,
-      message: configResult.errors[0],
+      headerMessage: "⚠ Complete the rule before saving.",
+      message: `⚠ Complete the rule before saving: ${configResult.errors[0]}`,
       errors: configResult.errors
     };
   }
 
   return {
     valid: true,
+    headerMessage: "✓ Rule is complete",
     message: "Rule pipeline is valid and ready to save!",
     errors: []
   };

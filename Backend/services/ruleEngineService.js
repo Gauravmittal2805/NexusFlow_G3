@@ -81,6 +81,18 @@ const processTelemetry = async (telemetryData) => {
         // Socket.IO may not be initialized in test environments
       }
 
+      // Step 8: Update lastTriggered on Rule document
+      if (rule._id) {
+        try {
+          const Rule = require('../models/Rule');
+          Rule.findByIdAndUpdate(rule._id, {
+            lastTriggered: new Date(),
+            lastTriggeredSensor: evalResult.sensorId,
+            lastTriggeredValue: triggerValue,
+          }).exec().catch(() => {});
+        } catch (_) {}
+      }
+
       // Backwards-compatible emission for 'rule:matched'
       ruleEventEmitter.emit('rule:matched', {
         ...triggerPayload,

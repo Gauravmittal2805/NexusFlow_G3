@@ -78,20 +78,28 @@ async function handleMatch(rule, result) {
   // can read the actual field values for its message generator.
   // The sensor output carries sensorId; condition output carries the actual value.
   const conditionOutput = outputs.find((o) => o.type === 'condition' || o.type === 'conditionNode');
+  const matchedField = conditionOutput?.output?.field || 'temperature';
+  const actualValue = conditionOutput?.output?.actual ?? null;
+
   const telemetryForAlert = {
     sensorId,
     ...(conditionOutput?.output
-      ? { [conditionOutput.output.field]: conditionOutput.output.actual }
+      ? { [matchedField]: actualValue }
       : {}),
   };
 
   console.log(
     `[RxJSRuleEngine] ✅ Rule triggered: "${ruleName}" | ` +
     `Sensor: ${sensorId} | ` +
+    `Field: ${matchedField} | ` +
+    `Value: ${actualValue} | ` +
     `Action: ${context.alertAction || 'NOTIFICATION'} | ` +
     `Severity: ${context.alertSeverity || 'HIGH'}`
   );
 
+  const nowIso = new Date().toISOString();
+
+  // Step 7 & 8: Emit enriched rule:triggered via Socket.IO
   // Emit rule:triggered via Socket.IO (Step 2 payload contract)
   try {
     const { getIo } = require('../websocket/telemetrySocket');
@@ -100,6 +108,10 @@ async function handleMatch(rule, result) {
       ruleId,
       ruleName,
       sensorId,
+      field: matchedField,
+      value: actualValue,
+      status: 'ACTIVE',
+      timestamp: nowIso,
       severity: context.alertSeverity || 'HIGH',
       action: context.alertAction || 'NOTIFICATION',
       field: conditionOutput?.output?.field || 'temperature',
@@ -108,6 +120,20 @@ async function handleMatch(rule, result) {
     });
   } catch (_) {
     // Socket.IO may not be available in test environments
+  }
+
+  // Step 8: Update lastTriggered on Rule in MongoDB
+  if (ruleId && /^[0-9a-fA-F]{24}$/.test(ruleId)) {
+    try {
+      const Rule = require('../models/Rule');
+      await Rule.findByIdAndUpdate(ruleId, {
+        lastTriggered: new Date(),
+        lastTriggeredSensor: sensorId,
+        lastTriggeredValue: actualValue,
+      });
+    } catch (dbErr) {
+      // Non-fatal if DB update fails
+    }
   }
 
   // Create alert in MongoDB + broadcast alert:new (Step 15)

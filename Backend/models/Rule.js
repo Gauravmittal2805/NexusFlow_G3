@@ -30,6 +30,23 @@ const ruleSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  status: {
+    type: String,
+    enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'RUNNING'],
+    default: 'ACTIVE',
+  },
+  lastTriggered: {
+    type: Date,
+    default: null,
+  },
+  lastTriggeredSensor: {
+    type: String,
+    default: null,
+  },
+  lastTriggeredValue: {
+    type: Number,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -16,15 +16,23 @@ import "@xyflow/react/dist/style.css";
 import NodePanel from "../components/NodePanel";
 import NodeConfigPanel from "../components/NodeConfigPanel";
 import SavedRulesPanel from "../components/SavedRulesPanel";
+import RuleStatus from "../components/RuleStatus";
+import RuleExecutionStatus from "../components/RuleExecutionStatus";
 
 import { nodeTypes } from "../components/ruleNodes";
-import { validateGraph, validateConnectionWithReason } from "../utils/graphValidation";
+import {
+  validateGraph,
+  validateConnectionWithReason,
+  getValidationChecklist
+} from "../utils/graphValidation";
 import { serializeRule, deserializeRule } from "../utils/ruleSerializer";
 import {
   createRule,
   updateRule,
   getRuleById,
-  getRules
+  getRules,
+  refreshRule,
+  updateRuleStatus
 } from "../services/ruleService";
 import { useSearchParams } from "react-router-dom";
 
@@ -33,6 +41,8 @@ const defaultInitialRule = {
   id: "rule-default-1",
   name: "High Temperature Alert",
   description: "Temperature exceeds 80°C",
+  isActive: true,
+  status: "ACTIVE",
   nodes: [
     {
       id: "sensor1",
@@ -75,6 +85,10 @@ function FlowCanvas({
   setRuleDescription,
   activeRuleId,
   setActiveRuleId,
+  isRuleActive,
+  setIsRuleActive,
+  ruleStatus,
+  setRuleStatus,
   selectedNode,
   setSelectedNode,
   rightPanelTab,
@@ -85,6 +99,7 @@ function FlowCanvas({
   const [toast, setToast] = useState(null);
   const [clearModalOpen, setClearModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [compilationFeedback, setCompilationFeedback] = useState(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   const showToast = (type, message) => {
@@ -115,11 +130,16 @@ function FlowCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialData.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialData.edges);
 
-  // Initialize Rule ID & Name on first render
+  // Initialize Rule ID, Name & Status on first render
   useEffect(() => {
     if (initialData.id || initialData._id) setActiveRuleId(initialData._id || initialData.id);
     if (initialData.name) setRuleName(initialData.name);
     if (initialData.description) setRuleDescription(initialData.description);
+    const activeFlag = initialData.status !== undefined
+      ? initialData.status === "ACTIVE" || initialData.status === "RUNNING"
+      : initialData.isActive !== false;
+    setIsRuleActive(activeFlag);
+    setRuleStatus(initialData.status || (activeFlag ? "ACTIVE" : "INACTIVE"));
   }, []);
 
   // Update a node's data in state
@@ -367,23 +387,77 @@ function FlowCanvas({
     [screenToFlowPosition, setNodes, setSelectedNode, setRightPanelTab, handleDuplicateNode, handleDeleteNode]
   );
 
+  // Step 2 & 3: Toggle Rule Runtime Status (Enable / Disable Control connected to backend)
+  const handleToggleActiveStatus = async () => {
+    const nextStatus = !isRuleActive;
+    const nextStatusText = nextStatus ? "ACTIVE" : "INACTIVE";
+
+    setIsRuleActive(nextStatus);
+    setRuleStatus(nextStatusText);
+
+    if (activeRuleId && /^[0-9a-fA-F]{24}$/.test(activeRuleId)) {
+      try {
+        await updateRuleStatus(activeRuleId, nextStatus);
+        if (nextStatus) {
+          showToast("success", `✓ Rule enabled — runtime pipeline active`);
+          setCompilationFeedback({
+            status: "success",
+            message: "✓ Rule compiled successfully"
+          });
+        } else {
+          showToast("info", `○ Rule disabled — runtime execution stopped`);
+          setCompilationFeedback(null);
+        }
+      } catch (err) {
+        console.warn("Failed to update status on backend:", err.message);
+        showToast("error", "✕ Failed to update rule status");
+      }
+    } else {
+      if (nextStatus) {
+        showToast("info", `Status set to Active (click Save Rule to start runtime)`);
+      } else {
+        showToast("info", `Status set to Inactive`);
+      }
+    }
+
+    // Persist to localStorage cache
+    try {
+      const raw = localStorage.getItem("nexusflow_rules");
+      if (raw) {
+        const list = JSON.parse(raw);
+        const updated = list.map((r) =>
+          (r._id === activeRuleId || r.id === activeRuleId)
+            ? { ...r, isActive: nextStatus, status: nextStatusText }
+            : r
+        );
+        localStorage.setItem("nexusflow_rules", JSON.stringify(updated));
+      }
+    } catch (e) {}
+  };
+
   // Step 4, 5, 6: Save Rule (Validation -> Serialization -> LocalStorage + Backend API POST/PUT)
   const handleSaveRule = async () => {
-    // 1. Pre-save Validation (Graph topology & Node configuration completeness)
+    // Step 6: Handle Invalid Rules - Validation check
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
       showToast("error", validation.message);
+      setCompilationFeedback({
+        status: "error",
+        message: "✕ Rule compilation failed (Incomplete rule graph)"
+      });
       return;
     }
 
     setIsSaving(true);
 
-    // 2. Serialization via ruleSerializer.js (Step 1, 2, 3)
+    // Serialization via ruleSerializer.js
     const cleanPayload = serializeRule(nodes, edges, {
       name: ruleName,
       description: ruleDescription,
       id: activeRuleId,
-      _id: activeRuleId && activeRuleId.length === 24 ? activeRuleId : undefined
+      _id: activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId) ? activeRuleId : undefined,
+      isActive: isRuleActive,
+      status: isRuleActive ? "ACTIVE" : "INACTIVE"
     });
 
     console.log("=========================================");
@@ -394,8 +468,9 @@ function FlowCanvas({
     try {
       let savedRuleId = activeRuleId;
       let backendSaved = false;
+      let compileSuccess = false;
 
-      // 3. Connect to backend API: POST /api/rules or PUT /api/rules/:id
+      // Connect to backend API: POST /api/rules or PUT /api/rules/:id
       try {
         const isMongoId = activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId);
         let res;
@@ -419,30 +494,60 @@ function FlowCanvas({
           savedRuleId = returnedRule._id || returnedRule.id;
           setActiveRuleId(savedRuleId);
           backendSaved = true;
+          compileSuccess = res.data?.compiled !== false;
+        }
+
+        // Step 4: Show save state
+        showToast("success", "✓ Rule saved successfully");
+
+        // Step 5: Add compilation/execution feedback
+        if (isRuleActive) {
+          if (compileSuccess) {
+            setCompilationFeedback({
+              status: "success",
+              message: "✓ Rule compiled successfully"
+            });
+          } else {
+            setCompilationFeedback({
+              status: "error",
+              message: "✕ Rule compilation failed"
+            });
+          }
+        } else {
+          setCompilationFeedback({
+            status: "info",
+            message: "○ Rule saved (Inactive)"
+          });
         }
       } catch (backendError) {
         console.warn("Backend save failed:", backendError.response?.data?.message || backendError.message);
-        
-        // Step 11 — Test API Error Handling:
-        // If backend returns: 400 -> "Unable to save rule. Please check the rule configuration."
-        // For network failure -> "Server unavailable. Please try again."
+
+        // Step 4 & 6: Don't expose raw backend errors
         if (backendError.response && backendError.response.status === 400) {
-          showToast("error", "Unable to save rule. Please check the rule configuration.");
-          setIsSaving(false);
-          return;
-        } else if (!backendError.response || backendError.code === "ERR_NETWORK" || backendError.message?.includes("Network Error")) {
-          showToast("error", "Server unavailable. Please try again.");
+          const backendMsg = backendError.response?.data?.message || "";
+          if (backendMsg.includes("Complete the rule before saving")) {
+            showToast("error", `⚠ ${backendMsg}`);
+          } else {
+            showToast("error", "⚠ Complete the rule before saving.");
+          }
         } else {
-          showToast("error", backendError.response?.data?.message || "Server unavailable. Please try again.");
+          showToast("error", "✕ Failed to save rule");
         }
+
+        setCompilationFeedback({
+          status: "error",
+          message: "✕ Rule compilation failed"
+        });
       }
 
-      // 4. Save to localStorage under `nexusflow_rules`
+      // Save to localStorage under `nexusflow_rules`
       const ruleIdForStorage = savedRuleId || `rule-${Date.now()}`;
       const ruleForStorage = {
         ...cleanPayload,
         id: ruleIdForStorage,
         _id: savedRuleId && savedRuleId.length === 24 ? savedRuleId : undefined,
+        isActive: isRuleActive,
+        status: isRuleActive ? "ACTIVE" : "INACTIVE",
         updatedAt: new Date().toISOString()
       };
 
@@ -470,14 +575,9 @@ function FlowCanvas({
       localStorage.setItem("nexusflow_active_rule_id", ruleIdForStorage);
       if (!activeRuleId) setActiveRuleId(ruleIdForStorage);
 
-      if (backendSaved) {
-        showToast("success", `✅ Rule "${ruleName}" saved successfully to database!`);
-      } else {
-        showToast("info", `Rule "${ruleName}" cached locally.`);
-      }
     } catch (e) {
       console.error("Storage error:", e);
-      showToast("error", "Failed to save rule.");
+      showToast("error", "✕ Failed to save rule");
     } finally {
       setIsSaving(false);
     }
@@ -524,6 +624,18 @@ function FlowCanvas({
     setRuleDescription(deserialized.description || "");
     setActiveRuleId(deserialized.id);
     setSelectedNode(null);
+
+    const activeFlag = targetRule.status !== undefined
+      ? targetRule.status === "ACTIVE" || targetRule.status === "RUNNING"
+      : targetRule.isActive !== false;
+    setIsRuleActive(activeFlag);
+    setRuleStatus(targetRule.status || (activeFlag ? "ACTIVE" : "INACTIVE"));
+    setCompilationFeedback(
+      activeFlag
+        ? { status: "success", message: "✓ Rule compiled successfully" }
+        : { status: "info", message: "○ Rule loaded (Inactive)" }
+    );
+
     localStorage.setItem("nexusflow_active_rule_id", deserialized.id);
 
     showToast("info", `Loaded rule: "${deserialized.name}"`);
@@ -541,7 +653,7 @@ function FlowCanvas({
     const loadRuleFromParam = async () => {
       // 1. Fetch from backend API
       try {
-        const res = await getRuleByIdRequest(urlRuleId);
+        const res = await getRuleById(urlRuleId);
         const fetchedRule = res?.data?.rule || res?.data;
         if (fetchedRule && isMounted) {
           handleLoadSavedRule(fetchedRule);
@@ -602,6 +714,9 @@ function FlowCanvas({
     setRuleName("New Rule");
     setRuleDescription("");
     setActiveRuleId(`rule-${Date.now()}`);
+    setIsRuleActive(true);
+    setRuleStatus("DRAFT");
+    setCompilationFeedback(null);
     setClearModalOpen(false);
     showToast("info", "Canvas cleared. Drag new nodes from library.");
   };
@@ -614,6 +729,9 @@ function FlowCanvas({
     setRuleName("New Rule");
     setRuleDescription("");
     setActiveRuleId(`rule-${Date.now()}`);
+    setIsRuleActive(true);
+    setRuleStatus("DRAFT");
+    setCompilationFeedback(null);
     showToast("info", "Started new rule.");
   };
 
@@ -623,6 +741,7 @@ function FlowCanvas({
   };
 
   const validationState = validateGraph(nodes, edges);
+  const checklist = getValidationChecklist(nodes, edges);
 
   // Find latest selected node from nodes state so changes reflect immediately
   const activeSelectedNode = nodes.find((n) => selectedNode && n.id === selectedNode.id) || null;
@@ -634,14 +753,45 @@ function FlowCanvas({
 
       {/* ─── Center Canvas Header Bar ─── */}
       <div className="canvas-header-bar">
-        <div className="canvas-info">
-          <span className={`canvas-status-dot ${validationState.valid ? "valid" : "invalid"}`}></span>
-          <span className="canvas-status-text">
-            {validationState.valid ? "Rule Valid & Connected" : "Rule Needs Attention"}
-          </span>
-          <span className="canvas-node-count">
-            ({nodes.length} nodes, {edges.length} connections)
-          </span>
+        <div className="canvas-info-group">
+          {/* Step 1 & 2: Rule Runtime Status Indicator and Enable/Disable Control */}
+          <div className="rule-runtime-control-bar">
+            <span className="runtime-status-label">
+              Status:
+              <span className={`status-pill ${isRuleActive ? "active" : "inactive"}`}>
+                <span className="status-dot-symbol">{isRuleActive ? "●" : "○"}</span>
+                <span className="status-name-text">
+                  {ruleStatus === "DRAFT" ? "Draft" : isRuleActive ? "Active" : "Inactive"}
+                </span>
+              </span>
+            </span>
+
+            <button
+              className={`btn-control-enable-disable ${isRuleActive ? "btn-disable-action" : "btn-enable-action"}`}
+              onClick={handleToggleActiveStatus}
+              title={isRuleActive ? "Click to Disable rule runtime execution" : "Click to Enable rule runtime execution"}
+            >
+              {isRuleActive ? "Disable" : "Enable"}
+            </button>
+          </div>
+
+          {/* Step 5: Compilation Feedback Display */}
+          {compilationFeedback && (
+            <div className={`compilation-status-badge ${compilationFeedback.status}`}>
+              {compilationFeedback.message}
+            </div>
+          )}
+
+          {/* Graph Validation Summary Indicator */}
+          <div className="canvas-validation-indicator">
+            <span className={`canvas-status-dot ${validationState.valid ? "valid" : "invalid"}`}></span>
+            <span className="canvas-status-text">
+              {validationState.valid ? "Rule Complete & Connected" : "⚠ Incomplete Rule"}
+            </span>
+            <span className="canvas-node-count">
+              ({nodes.length} nodes, {edges.length} edges)
+            </span>
+          </div>
         </div>
 
         <div className="canvas-actions">
@@ -720,7 +870,9 @@ function FlowCanvas({
                 serializeRule(nodes, edges, {
                   name: ruleName,
                   description: ruleDescription,
-                  id: activeRuleId
+                  id: activeRuleId,
+                  isActive: isRuleActive,
+                  status: isRuleActive ? "ACTIVE" : "INACTIVE"
                 })
               )
             }
@@ -759,6 +911,32 @@ function FlowCanvas({
           </button>
         </div>
       </div>
+
+      {/* Step 6 Checklist Warning Banner (shown when graph is incomplete) */}
+      {!validationState.valid && (
+        <div className="graph-validation-checklist-banner">
+          <div className="checklist-title">
+            <span>⚠ Complete the rule before saving:</span>
+          </div>
+          <div className="checklist-items">
+            <span className={`checklist-chip ${checklist.hasSensor ? "passed" : "failed"}`}>
+              {checklist.hasSensor ? "✓" : "✕"} Sensor exists
+            </span>
+            <span className={`checklist-chip ${checklist.hasCondition ? "passed" : "failed"}`}>
+              {checklist.hasCondition ? "✓" : "✕"} Condition exists
+            </span>
+            <span className={`checklist-chip ${checklist.hasAction ? "passed" : "failed"}`}>
+              {checklist.hasAction ? "✓" : "✕"} Action exists
+            </span>
+            <span className={`checklist-chip ${checklist.nodesConnected ? "passed" : "failed"}`}>
+              {checklist.nodesConnected ? "✓" : "✕"} Nodes connected
+            </span>
+            <span className={`checklist-chip ${checklist.configComplete ? "passed" : "failed"}`}>
+              {checklist.configComplete ? "✓" : "✕"} Node configuration complete
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ─── Main ReactFlow Workspace ─── */}
       <div className="react-flow-split-view">
@@ -821,7 +999,7 @@ function FlowCanvas({
           </ReactFlow>
         </div>
 
-        {/* ─── Right Side Panel (Tabs: Node Config OR My Rules) ─── */}
+        {/* ─── Right Side Panel (Tabs: Node Config | Monitor | My Rules) ─── */}
         <div className="flow-right-sidebar">
           <div className="right-panel-tabs">
             <button
@@ -829,6 +1007,12 @@ function FlowCanvas({
               onClick={() => setRightPanelTab("config")}
             >
               ⚙️ Node Config
+            </button>
+            <button
+              className={`panel-tab-btn ${rightPanelTab === "monitor" ? "active" : ""}`}
+              onClick={() => setRightPanelTab("monitor")}
+            >
+              ⚡ Monitor
             </button>
             <button
               className={`panel-tab-btn ${rightPanelTab === "rules" ? "active" : ""}`}
@@ -847,12 +1031,28 @@ function FlowCanvas({
                 onDeleteNode={handleDeleteNode}
                 onClose={() => setSelectedNode(null)}
               />
+            ) : rightPanelTab === "monitor" ? (
+              <RuleExecutionStatus
+                ruleId={activeRuleId}
+                ruleName={ruleName}
+                isRuleActive={isRuleActive}
+                compilationStatus={compilationFeedback}
+                onTriggerUpdate={(trigger) => {
+                  console.log("⚡ Live trigger update in FlowBuilder:", trigger);
+                }}
+              />
             ) : (
               <SavedRulesPanel
                 activeRuleId={activeRuleId}
                 onLoadRule={handleLoadSavedRule}
                 onNewRule={handleCreateNewRule}
                 onDeleteRule={handleDeleteSavedRule}
+                onStatusChange={(ruleId, newStatus) => {
+                  if (ruleId === activeRuleId) {
+                    setIsRuleActive(newStatus);
+                    setRuleStatus(newStatus ? "ACTIVE" : "INACTIVE");
+                  }
+                }}
                 onViewJson={onOpenJsonModal}
                 onClose={() => setRightPanelTab("config")}
               />
@@ -893,6 +1093,8 @@ export default function FlowBuilder() {
   const [ruleName, setRuleName] = useState("High Temperature Alert");
   const [ruleDescription, setRuleDescription] = useState("Temperature exceeds 80°C");
   const [activeRuleId, setActiveRuleId] = useState(null);
+  const [isRuleActive, setIsRuleActive] = useState(true);
+  const [ruleStatus, setRuleStatus] = useState("ACTIVE");
   const [selectedNode, setSelectedNode] = useState(null);
   const [rightPanelTab, setRightPanelTab] = useState("config");
   const [jsonModalData, setJsonModalData] = useState(null);
@@ -906,7 +1108,7 @@ export default function FlowBuilder() {
           <p>Design real-time telemetry processing pipelines & automated threshold triggers</p>
         </div>
 
-        {/* Rule Name & Description Inputs */}
+        {/* Rule Name & Description Inputs & Status */}
         <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
           <div className="rule-name-input-group">
             <label htmlFor="rule-name-input">Rule Name:</label>
@@ -956,6 +1158,10 @@ export default function FlowBuilder() {
               setRuleDescription={setRuleDescription}
               activeRuleId={activeRuleId}
               setActiveRuleId={setActiveRuleId}
+              isRuleActive={isRuleActive}
+              setIsRuleActive={setIsRuleActive}
+              ruleStatus={ruleStatus}
+              setRuleStatus={setRuleStatus}
               selectedNode={selectedNode}
               setSelectedNode={setSelectedNode}
               rightPanelTab={rightPanelTab}
