@@ -16,6 +16,20 @@ export default function AlertCard({ alert, onClick }) {
     ? formatTime(alert.timestamp || alert.createdAt)
     : alert.time || "Recently";
 
+  // Build concise detail text
+  let detailSnippet = "";
+  if (alert.valueDisplay) {
+    detailSnippet = alert.valueDisplay;
+  } else if (alert.field && alert.value !== undefined) {
+    const unit = alert.field.toLowerCase().includes("temp") ? "°C"
+               : alert.field.toLowerCase().includes("press") ? " PSI"
+               : alert.field.toLowerCase().includes("rpm") ? " RPM"
+               : alert.field.toLowerCase().includes("humid") ? "%" : "";
+    detailSnippet = `${alert.field.charAt(0).toUpperCase() + alert.field.slice(1)}: ${alert.value}${unit}`;
+  } else if (alert.message) {
+    detailSnippet = alert.message.slice(0, 50) + (alert.message.length > 50 ? "..." : "");
+  }
+
   return (
     <div
       className="alert-card clickable-alert-card"
@@ -31,7 +45,7 @@ export default function AlertCard({ alert, onClick }) {
       <div className="alert-content">
         <strong>{title}</strong>
         <span>
-          📍 {sensor} {alert.message ? `· ${alert.message.slice(0, 45)}${alert.message.length > 45 ? "..." : ""}` : ""}
+          📍 {sensor} {detailSnippet ? `· ${detailSnippet}` : ""}
         </span>
       </div>
 
