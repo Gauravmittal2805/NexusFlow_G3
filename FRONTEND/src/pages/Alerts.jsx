@@ -40,19 +40,24 @@ export default function Alerts() {
   const [statusFilter, setStatusFilter]   = useState("All");
   const [sensorFilter, setSensorFilter]   = useState("All");
 
-  // Auto-select alert if selectedAlertId is set in context
+  // Auto-select alert if selectedAlertId is set in context (Step 7: Direct navigation from toast/card)
   React.useEffect(() => {
     if (selectedAlertId && alerts.length > 0) {
       const match = alerts.find(
-        (a) => (a._id || a.id || "").toString() === selectedAlertId.toString()
+        (a) =>
+          (a._id || a.id || a.alertId || "").toString() === selectedAlertId.toString() ||
+          (a.ruleId && a.ruleId.toString() === selectedAlertId.toString())
       );
       if (match) {
         setSelectedAlert(match);
+        if (match.status === "unread" && match._id) {
+          markAsRead(match._id).catch(() => {});
+        }
         // Clear selectedAlertId once consumed
         if (setSelectedAlertId) setSelectedAlertId(null);
       }
     }
-  }, [selectedAlertId, alerts, setSelectedAlertId]);
+  }, [selectedAlertId, alerts, setSelectedAlertId, markAsRead]);
 
   // Step 5: Dynamically extract available sensor IDs from all alerts
   const availableSensors = useMemo(() => {

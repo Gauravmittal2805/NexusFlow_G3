@@ -52,18 +52,18 @@ const processTelemetry = async (telemetryData) => {
           : timestamp.toISOString()
         : new Date().toISOString();
 
+      // Step 9: Generate Rule Trigger Event 'rule:triggered' (Step 2 payload contract)
+      const alertNode = rule.nodes?.find((n) => n.type === 'alert' || n.type === 'alertNode');
       const conditionNode = rule.nodes?.find((n) => n.type === 'condition' || n.type === 'conditionNode');
       const conditionField = conditionNode?.data?.field || 'temperature';
-      const triggerValue = telemetryData[conditionField] ?? telemetryData.temperature ?? null;
-
-      // Step 9: Generate Rule Trigger Event 'rule:triggered' (enriched with field and value)
       const triggerPayload = {
         ruleId: evalResult.ruleId,
         ruleName: rule.name || 'Unnamed Rule',
         sensorId: evalResult.sensorId,
+        severity: alertNode?.data?.severity || 'HIGH',
+        action: alertNode?.data?.action || 'NOTIFICATION',
         field: conditionField,
-        value: triggerValue,
-        status: 'ACTIVE',
+        value: telemetryData[conditionField] !== undefined ? telemetryData[conditionField] : telemetryData.temperature,
         timestamp: eventTimestamp,
       };
 

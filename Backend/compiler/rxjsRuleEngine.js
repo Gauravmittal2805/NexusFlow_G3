@@ -100,6 +100,7 @@ async function handleMatch(rule, result) {
   const nowIso = new Date().toISOString();
 
   // Step 7 & 8: Emit enriched rule:triggered via Socket.IO
+  // Emit rule:triggered via Socket.IO (Step 2 payload contract)
   try {
     const { getIo } = require('../websocket/telemetrySocket');
     const io = getIo();
@@ -111,6 +112,11 @@ async function handleMatch(rule, result) {
       value: actualValue,
       status: 'ACTIVE',
       timestamp: nowIso,
+      severity: context.alertSeverity || 'HIGH',
+      action: context.alertAction || 'NOTIFICATION',
+      field: conditionOutput?.output?.field || 'temperature',
+      value: conditionOutput?.output?.actual,
+      timestamp: new Date().toISOString(),
     });
   } catch (_) {
     // Socket.IO may not be available in test environments
