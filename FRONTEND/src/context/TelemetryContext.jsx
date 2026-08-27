@@ -35,17 +35,17 @@ export function TelemetryProvider({ children }) {
     useState(initialTelemetry);
 
   // History cap: keep the latest MAX_HISTORY_POINTS per sensor so the chart
-  // never grows unbounded in the browser (Step 14).
-  const MAX_HISTORY_POINTS = 50;
+  // never grows unbounded in the browser (Step 3 & Step 9: 50–100 points).
+  const MAX_HISTORY_POINTS = 100;
 
   const [historyBySensor, setHistoryBySensor] = useState({
     "TURBINE-001": [
-      { time: "10s", temperature: 72,   pressure: 116, rpm: 1750, humidity: 41 },
-      { time: "20s", temperature: 74,   pressure: 118, rpm: 1780, humidity: 42 },
-      { time: "30s", temperature: 76,   pressure: 119, rpm: 1795, humidity: 43 },
-      { time: "40s", temperature: 75,   pressure: 121, rpm: 1805, humidity: 42 },
-      { time: "50s", temperature: 78,   pressure: 120, rpm: 1800, humidity: 44 },
-      { time: "60s", temperature: 78.5, pressure: 120, rpm: 1800, humidity: 43 },
+      { timestamp: new Date(Date.now() - 50000).toISOString(), time: "10:30:10", temperature: 72,   pressure: 116, rpm: 1750, humidity: 41 },
+      { timestamp: new Date(Date.now() - 40000).toISOString(), time: "10:30:20", temperature: 74,   pressure: 118, rpm: 1780, humidity: 42 },
+      { timestamp: new Date(Date.now() - 30000).toISOString(), time: "10:30:30", temperature: 76,   pressure: 119, rpm: 1795, humidity: 43 },
+      { timestamp: new Date(Date.now() - 20000).toISOString(), time: "10:30:40", temperature: 75,   pressure: 121, rpm: 1805, humidity: 42 },
+      { timestamp: new Date(Date.now() - 10000).toISOString(), time: "10:30:50", temperature: 78,   pressure: 120, rpm: 1800, humidity: 44 },
+      { timestamp: new Date().toISOString(),                   time: "10:31:00", temperature: 78.5, pressure: 120, rpm: 1800, humidity: 43 },
     ],
   });
 
@@ -56,6 +56,13 @@ export function TelemetryProvider({ children }) {
 
   const [activeSensorId, setActiveSensorId] =
     useState("TURBINE-001");
+
+  // Step 10: Live / Paused stream visualization toggle
+  const [isPaused, setIsPaused] = useState(false);
+
+  const togglePause = useCallback(() => {
+    setIsPaused((prev) => !prev);
+  }, []);
 
   // Real-time Rule Triggers state: { [ruleId]: { ruleId, ruleName, sensorId, timestamp, triggeredAtMs } }
   const [ruleTriggers, setRuleTriggers] = useState({});
@@ -144,6 +151,22 @@ export function TelemetryProvider({ children }) {
   );
 
   /*
+   * Helper to format raw backend timestamp into clean chart label e.g. "10:30:15"
+   * (Step 8: Doesn't mutate actual telemetry timestamp)
+   */
+  const formatChartTime = (rawTimestamp) => {
+    if (!rawTimestamp) return "Just now";
+    const date = new Date(rawTimestamp);
+    if (isNaN(date.getTime())) return "Just now";
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  };
+
+  /*
    * Receives telemetry from:
    *
    * Socket.IO
@@ -160,36 +183,33 @@ export function TelemetryProvider({ children }) {
 
     console.log("Live telemetry received:", data);
 
-    // Store latest telemetry for each sensor
+    const formattedTime = formatChartTime(data.timestamp);
+
+    // Store latest telemetry for each sensor (Step 1 & Step 14)
     setTelemetryBySensor((previous) => ({
       ...previous,
       [data.sensorId]: {
         ...previous[data.sensorId],
         ...data,
+        formattedTime,
       },
     }));
 
-    // Add new telemetry point to chart history
+    // Add new telemetry point to rolling chart history (Step 2, 3, 8, 9)
     setHistoryBySensor((previous) => {
       const oldHistory = previous[data.sensorId] || [];
 
       const newPoint = {
-        time: new Date(
-          data.timestamp || Date.now()
-        ).toLocaleTimeString([], {
-          minute: "2-digit",
-          second: "2-digit",
-        }),
-
-        temperature: data.temperature ?? null,
-        pressure: data.pressure ?? null,
-        rpm: data.rpm ?? null,
-        humidity: data.humidity ?? null,
+        timestamp: data.timestamp || new Date().toISOString(),
+        time: formattedTime,
+        temperature: typeof data.temperature === "number" ? data.temperature : (Number(data.temperature) || null),
+        pressure: typeof data.pressure === "number" ? data.pressure : (Number(data.pressure) || null),
+        rpm: typeof data.rpm === "number" ? data.rpm : (Number(data.rpm) || null),
+        humidity: typeof data.humidity === "number" ? data.humidity : (Number(data.humidity) || null),
       };
 
       return {
         ...previous,
-
         [data.sensorId]: [
           ...oldHistory,
           newPoint,
@@ -434,45 +454,50 @@ export function TelemetryProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      // Day 1 & Day 2 State Properties (Step 1)
+      latestTelemetry: activeTelemetry,
+      telemetryHistory: history,
+      history, // alias for backwards compatibility
+      telemetryBySensor,
+      historyBySensor,
+
       sensors,
-
-      history,
-
       sensorIds,
-
       activeSensorId,
-
       setActiveSensorId,
 
+      // Live / Paused State (Step 10)
+      isPaused,
+      setIsPaused,
+      togglePause,
+
       connectionStatus,
-
       connectionError,
-
       connected:
         connectionStatus === "connected",
 
       updateTelemetry,
-
       ruleTriggers,
-
       lastTriggeredRule,
-
       notifications,
-
       addNotification,
-
       dismissNotification,
 
       // Step 4: live alerts from alert:new Socket.IO event
       liveAlerts,
-
       clearLiveAlerts,
     }),
     [
-      sensors,
+      activeTelemetry,
       history,
+      telemetryBySensor,
+      historyBySensor,
+      sensors,
       sensorIds,
       activeSensorId,
+      isPaused,
+      setIsPaused,
+      togglePause,
       connectionStatus,
       connectionError,
       updateTelemetry,

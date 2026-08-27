@@ -23,11 +23,13 @@ import {
   YAxis,
 } from "recharts";
 
-export default function RPMChart({ data }) {
+export default function RPMChart({ data, isPaused = false }) {
   if (!data?.length) {
     return (
-      <div className="empty-state">
-        No RPM data available.
+      <div className="empty-state" style={{ minHeight: "240px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+        <span style={{ fontSize: "28px" }}>⚙️</span>
+        <strong style={{ color: "#4f5a6c", fontSize: "14px" }}>No RPM data available</strong>
+        <span style={{ color: "#8a94a5", fontSize: "12px" }}>Waiting for sensor data...</span>
       </div>
     );
   }
