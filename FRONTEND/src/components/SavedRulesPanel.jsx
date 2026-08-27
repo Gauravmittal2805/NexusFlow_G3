@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { getRules, deleteRule } from "../services/ruleService";
+import { getRules, deleteRule, updateRuleStatus } from "../services/ruleService";
 
 export default function SavedRulesPanel({
   activeRuleId,
   onLoadRule,
   onNewRule,
   onDeleteRule,
+  onStatusChange,
   onViewJson,
   onClose
 }) {
   const [savedRules, setSavedRules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
@@ -50,6 +52,58 @@ export default function SavedRulesPanel({
   useEffect(() => {
     fetchRules();
   }, [fetchRules, activeRuleId]);
+
+  const handleToggleStatus = async (rule, e) => {
+    e.stopPropagation();
+    const ruleId = rule._id || rule.id;
+    const isCurrentActive =
+      rule.status !== undefined
+        ? rule.status === "ACTIVE" || rule.status === "RUNNING"
+        : rule.isActive !== false;
+    const newActive = !isCurrentActive;
+
+    setTogglingId(ruleId);
+    try {
+      if (rule._id && /^[0-9a-fA-F]{24}$/.test(rule._id)) {
+        await updateRuleStatus(rule._id, newActive);
+      }
+
+      setSavedRules((prev) =>
+        prev.map((r) => {
+          if ((r._id || r.id) === ruleId) {
+            return {
+              ...r,
+              isActive: newActive,
+              status: newActive ? "ACTIVE" : "INACTIVE"
+            };
+          }
+          return r;
+        })
+      );
+
+      // Also persist to localStorage cache
+      try {
+        const raw = localStorage.getItem("nexusflow_rules");
+        if (raw) {
+          const list = JSON.parse(raw);
+          const updated = list.map((r) =>
+            (r._id === ruleId || r.id === ruleId)
+              ? { ...r, isActive: newActive, status: newActive ? "ACTIVE" : "INACTIVE" }
+              : r
+          );
+          localStorage.setItem("nexusflow_rules", JSON.stringify(updated));
+        }
+      } catch (e) {}
+
+      if (onStatusChange) {
+        onStatusChange(ruleId, newActive);
+      }
+    } catch (err) {
+      console.warn("Failed to toggle rule status:", err.message);
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
@@ -123,7 +177,12 @@ export default function SavedRulesPanel({
           <div className="rules-list">
             {savedRules.map((rule) => {
               const ruleId = rule._id || rule.id;
-              const isActive = ruleId === activeRuleId || rule.id === activeRuleId;
+              const isSelectedOnCanvas = ruleId === activeRuleId || rule.id === activeRuleId;
+              const isRuleActive =
+                rule.status !== undefined
+                  ? rule.status === "ACTIVE" || rule.status === "RUNNING"
+                  : rule.isActive !== false;
+              const statusDisplay = rule.status || (isRuleActive ? "Active" : "Inactive");
               const nodeCount = rule.nodes ? rule.nodes.length : 0;
               const edgeCount = rule.edges ? rule.edges.length : 0;
               const dateStr = rule.createdAt || rule.updatedAt
@@ -138,14 +197,35 @@ export default function SavedRulesPanel({
               return (
                 <div
                   key={ruleId}
-                  className={`saved-rule-card ${isActive ? "is-active" : ""}`}
+                  className={`saved-rule-card ${isSelectedOnCanvas ? "is-active" : ""}`}
                   onClick={() => onLoadRule(rule)}
                 >
                   <div className="rule-card-header">
                     <span className="rule-card-name" title={rule.name}>
                       {rule.name || "Untitled Rule"}
                     </span>
-                    {isActive && <span className="active-pill">Active</span>}
+                    {isSelectedOnCanvas && <span className="active-pill">Editing</span>}
+                  </div>
+
+                  {/* Step 1 & 2: Rule Runtime Status and Enable / Disable Control */}
+                  <div className="rule-card-status-row" onClick={(e) => e.stopPropagation()}>
+                    <div className="rule-status-text-wrap">
+                      <span className="rule-status-label">Status:</span>
+                      <span className={`status-dot-indicator ${isRuleActive ? "active" : "inactive"}`}>
+                        {isRuleActive ? "●" : "○"}
+                      </span>
+                      <span className={`status-value-text ${isRuleActive ? "active" : "inactive"}`}>
+                        {statusDisplay}
+                      </span>
+                    </div>
+                    <button
+                      className={`btn-enable-disable-toggle ${isRuleActive ? "btn-disable" : "btn-enable"}`}
+                      onClick={(e) => handleToggleStatus(rule, e)}
+                      disabled={togglingId === ruleId}
+                      title={isRuleActive ? "Disable rule execution" : "Enable rule execution"}
+                    >
+                      {togglingId === ruleId ? "..." : isRuleActive ? "Disable" : "Enable"}
+                    </button>
                   </div>
 
                   {rule.description && (
@@ -153,6 +233,32 @@ export default function SavedRulesPanel({
                       {rule.description}
                     </p>
                   )}
+
+                  {/* Step 8: Last Trigger Information */}
+                  <div className="rule-card-trigger-info">
+                    <span className="trigger-time-badge">
+                      ⏱️ Last Triggered:{" "}
+                      <strong>
+                        {rule.lastTriggered
+                          ? new Date(rule.lastTriggered).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit"
+                            })
+                          : "Never"}
+                      </strong>
+                    </span>
+                    <span className="trigger-sensor-badge">
+                      🔌 Sensor:{" "}
+                      <strong>
+                        {rule.lastTriggeredSensor ||
+                          rule.nodes?.find(
+                            (n) => (n.type || "").toLowerCase().includes("sensor")
+                          )?.data?.sensorId ||
+                          "TURBINE-001"}
+                      </strong>
+                    </span>
+                  </div>
 
                   <div className="rule-card-meta">
                     <span>⚡ {nodeCount} nodes, {edgeCount} edges</span>

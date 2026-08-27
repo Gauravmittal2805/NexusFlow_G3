@@ -78,21 +78,28 @@ async function handleMatch(rule, result) {
   // can read the actual field values for its message generator.
   // The sensor output carries sensorId; condition output carries the actual value.
   const conditionOutput = outputs.find((o) => o.type === 'condition' || o.type === 'conditionNode');
+  const matchedField = conditionOutput?.output?.field || 'temperature';
+  const actualValue = conditionOutput?.output?.actual ?? null;
+
   const telemetryForAlert = {
     sensorId,
     ...(conditionOutput?.output
-      ? { [conditionOutput.output.field]: conditionOutput.output.actual }
+      ? { [matchedField]: actualValue }
       : {}),
   };
 
   console.log(
     `[RxJSRuleEngine] ✅ Rule triggered: "${ruleName}" | ` +
     `Sensor: ${sensorId} | ` +
+    `Field: ${matchedField} | ` +
+    `Value: ${actualValue} | ` +
     `Action: ${context.alertAction || 'NOTIFICATION'} | ` +
     `Severity: ${context.alertSeverity || 'HIGH'}`
   );
 
-  // Emit rule:triggered via Socket.IO
+  const nowIso = new Date().toISOString();
+
+  // Step 7 & 8: Emit enriched rule:triggered via Socket.IO
   try {
     const { getIo } = require('../websocket/telemetrySocket');
     const io = getIo();
@@ -100,10 +107,27 @@ async function handleMatch(rule, result) {
       ruleId,
       ruleName,
       sensorId,
-      timestamp: new Date().toISOString(),
+      field: matchedField,
+      value: actualValue,
+      status: 'ACTIVE',
+      timestamp: nowIso,
     });
   } catch (_) {
     // Socket.IO may not be available in test environments
+  }
+
+  // Step 8: Update lastTriggered on Rule in MongoDB
+  if (ruleId && /^[0-9a-fA-F]{24}$/.test(ruleId)) {
+    try {
+      const Rule = require('../models/Rule');
+      await Rule.findByIdAndUpdate(ruleId, {
+        lastTriggered: new Date(),
+        lastTriggeredSensor: sensorId,
+        lastTriggeredValue: actualValue,
+      });
+    } catch (dbErr) {
+      // Non-fatal if DB update fails
+    }
   }
 
   // Create alert in MongoDB + broadcast alert:new (Step 15)

@@ -52,11 +52,18 @@ const processTelemetry = async (telemetryData) => {
           : timestamp.toISOString()
         : new Date().toISOString();
 
-      // Step 9: Generate Rule Trigger Event 'rule:triggered'
+      const conditionNode = rule.nodes?.find((n) => n.type === 'condition' || n.type === 'conditionNode');
+      const conditionField = conditionNode?.data?.field || 'temperature';
+      const triggerValue = telemetryData[conditionField] ?? telemetryData.temperature ?? null;
+
+      // Step 9: Generate Rule Trigger Event 'rule:triggered' (enriched with field and value)
       const triggerPayload = {
         ruleId: evalResult.ruleId,
         ruleName: rule.name || 'Unnamed Rule',
         sensorId: evalResult.sensorId,
+        field: conditionField,
+        value: triggerValue,
+        status: 'ACTIVE',
         timestamp: eventTimestamp,
       };
 
@@ -72,6 +79,18 @@ const processTelemetry = async (telemetryData) => {
         io.emit('rule:triggered', triggerPayload);
       } catch (ioErr) {
         // Socket.IO may not be initialized in test environments
+      }
+
+      // Step 8: Update lastTriggered on Rule document
+      if (rule._id) {
+        try {
+          const Rule = require('../models/Rule');
+          Rule.findByIdAndUpdate(rule._id, {
+            lastTriggered: new Date(),
+            lastTriggeredSensor: evalResult.sensorId,
+            lastTriggeredValue: triggerValue,
+          }).exec().catch(() => {});
+        } catch (_) {}
       }
 
       // Backwards-compatible emission for 'rule:matched'

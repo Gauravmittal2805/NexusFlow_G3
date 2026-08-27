@@ -212,6 +212,7 @@ function buildExecutionOrder(nodes, edges, nodeMap) {
     math: 2, mathNode: 2,
     filter: 2,
     alert: 3, alertNode: 3,
+    action: 3, actionNode: 3,
   };
 
   const priority = (id) => {
@@ -339,6 +340,8 @@ function buildRxjsPipe(executionOrder, nodeMap, ruleId, ruleName) {
       // ── Alert: tap() — sink side-effect ─────────────────────────────────
       case 'alert':
       case 'alertNode':
+      case 'action':
+      case 'actionNode':
         operators.push(
           tap((packet) => {
             const result = handler(node, packet.telemetry, packet.context);

@@ -5176,4 +5176,507 @@ button {
   font-weight: 600;
 }
 
+/* ==========================================================================
+   Rule Runtime Status & Enable/Disable Controls (Steps 1, 2, 3, 5, 6)
+   ========================================================================== */
+
+.canvas-info-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rule-runtime-control-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.runtime-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: capitalize;
+}
+
+.status-pill.active {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.status-pill.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.status-dot-symbol {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.btn-control-enable-disable {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.btn-control-enable-disable.btn-disable-action {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.btn-control-enable-disable.btn-disable-action:hover {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.btn-control-enable-disable.btn-enable-action {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.btn-control-enable-disable.btn-enable-action:hover {
+  background: #bfdbfe;
+  color: #1e40af;
+}
+
+.compilation-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 6px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.compilation-status-badge.success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.compilation-status-badge.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.compilation-status-badge.info {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.canvas-validation-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.graph-validation-checklist-banner {
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.checklist-title {
+  font-weight: 700;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checklist-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checklist-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.checklist-chip.passed {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.checklist-chip.failed {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+/* Saved Rules Panel Status Controls */
+.rule-card-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.rule-status-text-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.rule-status-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.status-dot-indicator.active {
+  color: #16a34a;
+  font-size: 12px;
+}
+
+.status-dot-indicator.inactive {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.status-value-text.active {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.status-value-text.inactive {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.btn-enable-disable-toggle {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-enable-disable-toggle.btn-disable {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.btn-enable-disable-toggle.btn-disable:hover {
+  background: #fecaca;
+}
+
+.btn-enable-disable-toggle.btn-enable {
+  background: #dbeafe;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.btn-enable-disable-toggle.btn-enable:hover {
+  background: #bfdbfe;
+}
+
+/* ==========================================================================
+   RuleExecutionStatus & Live Trigger Monitor Panel (Steps 7 & 8)
+   ========================================================================== */
+
+.rule-execution-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  border-radius: 10px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.execution-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-title-wrap h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #16a34a;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  background: #16a34a;
+  border-radius: 50%;
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+.idle-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.compilation-pill-bar {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.compilation-pill-bar.success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.compilation-pill-bar.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.compilation-pill-bar.info {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.live-trigger-card {
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.live-trigger-card.trigger-pulse-glow {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  transform: scale(1.02);
+}
+
+.trigger-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.trigger-alert-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.trigger-time-stamp {
+  font-size: 10px;
+  color: #78350f;
+  font-family: monospace;
+}
+
+.trigger-rule-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+.trigger-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #334155;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.trigger-sensor-tag strong {
+  color: #2563eb;
+}
+
+.trigger-metric-value {
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.no-triggers-yet-state {
+  text-align: center;
+  padding: 24px 10px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.waiting-pulse {
+  font-size: 20px;
+  animation: spinSlow 3s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.trigger-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.history-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  background: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.history-time {
+  color: #64748b;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.history-sensor {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.history-val {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* Rule Card Trigger Info in Saved Rules */
+.rule-card-trigger-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #475569;
+  background: #ffffff;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #f1f5f9;
+  margin: 2px 0;
+}
+
+.trigger-time-badge strong {
+  color: #0f172a;
+}
+
+.trigger-sensor-badge strong {
+  color: #3b82f6;
+}
+
 
