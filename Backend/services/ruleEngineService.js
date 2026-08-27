@@ -3,6 +3,11 @@ const ruleService = require('./ruleService');
 const { evaluateRule } = require('./ruleEvaluator');
 const { processRuleTrigger } = require('./alertService');
 
+// ── RxJS telemetry feed (Step 1 & 2) ─────────────────────────────────────────
+// Push every incoming reading into the shared Subject so all compiled rule
+// pipelines in rxjsRuleEngine receive it without an extra DB query.
+const { push: pushToStream } = require('../compiler/telemetryStream');
+
 // Internal Event Emitter for Rule Engine events (Step 9)
 class RuleEventEmitter extends EventEmitter {}
 const ruleEventEmitter = new RuleEventEmitter();
@@ -25,7 +30,12 @@ const processTelemetry = async (telemetryData) => {
   // Step 10 Log: Telemetry received
   console.log(`[RuleEngine] Telemetry received for sensor: ${sensorId}`);
 
-  // Fetch active rules only
+  // ── Step 1 & 2: Feed the RxJS stream ──────────────────────────────────────
+  // Push into telemetry$ so every compiled RxJS rule pipeline evaluates this
+  // reading in memory — no extra DB query needed per rule.
+  pushToStream(telemetryData);
+
+  // Fetch active rules only (legacy synchronous evaluator — runs in parallel)
   const activeRules = await ruleService.getActiveRules();
   if (!activeRules || !Array.isArray(activeRules) || activeRules.length === 0) {
     return;

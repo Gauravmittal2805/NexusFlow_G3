@@ -6,6 +6,7 @@ const app          = require('./app');
 const connectDB    = require('./config/db');
 const { initWebSocket }  = require('./websocket/telemetrySocket');
 const { startSimulator, stopSimulator } = require('./services/telemetrySimulator');
+const { activateAll, deactivateAll }    = require('./compiler/rxjsRuleEngine');
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -36,11 +37,15 @@ server.listen(PORT, async () => {
     // Connect to MongoDB first — the simulator needs it to persist readings
     await connectDB();
 
+    // Start the RxJS rule engine — compile all active rules into memory
+    // pipelines subscribed to the live telemetry$ Subject (Steps 12–13)
+    await activateAll();
+
     // Start the real-time simulator (replaces the old inline setInterval)
     startSimulator();
 });
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 
-process.on('SIGINT',  () => { stopSimulator(); process.exit(0); });
-process.on('SIGTERM', () => { stopSimulator(); process.exit(0); });
+process.on('SIGINT',  () => { deactivateAll(); stopSimulator(); process.exit(0); });
+process.on('SIGTERM', () => { deactivateAll(); stopSimulator(); process.exit(0); });

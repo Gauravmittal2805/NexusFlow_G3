@@ -296,6 +296,8 @@ function buildRxjsPipe(executionOrder, nodeMap, ruleId, ruleName) {
         operators.push(
           filter((packet) => {
             const result = handler(node, packet.telemetry, packet.context);
+            // Always record the output so outputs[] has one entry per node
+            packet.outputs.push({ nodeId, type: node.type, output: result.output ?? null });
             return result.pass;
           })
         );
