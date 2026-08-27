@@ -17,25 +17,22 @@ import NodePanel from "../components/NodePanel";
 import NodeConfigPanel from "../components/NodeConfigPanel";
 import SavedRulesPanel from "../components/SavedRulesPanel";
 
-import {
-  SensorNode,
-  ConditionNode,
-  MathNode,
-  ActionNode,
-  nodeTypes
-} from "../components/ruleNodes";
-
+import { nodeTypes } from "../components/ruleNodes";
 import { validateGraph, validateConnectionWithReason } from "../utils/graphValidation";
-import { serializeGraph, deserializeGraph } from "../utils/graphSerializer";
-import { createRuleRequest, getRuleByIdRequest } from "../services/api";
+import { serializeRule, deserializeRule } from "../utils/ruleSerializer";
+import {
+  createRule,
+  updateRule,
+  getRuleById,
+  getRules
+} from "../services/ruleService";
 import { useSearchParams } from "react-router-dom";
-
-
 
 // Canonical initial default pipeline (Sensor -> Condition -> Action)
 const defaultInitialRule = {
   id: "rule-default-1",
-  name: "High Turbine Temperature",
+  name: "High Temperature Alert",
+  description: "Temperature exceeds 80°C",
   nodes: [
     {
       id: "sensor1",
@@ -74,6 +71,8 @@ const defaultInitialRule = {
 function FlowCanvas({
   ruleName,
   setRuleName,
+  ruleDescription,
+  setRuleDescription,
   activeRuleId,
   setActiveRuleId,
   selectedNode,
@@ -85,11 +84,12 @@ function FlowCanvas({
   const reactFlowWrapper = useRef(null);
   const [toast, setToast] = useState(null);
   const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   const showToast = (type, message) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 4500);
+    setTimeout(() => setToast(null), 5000);
   };
 
   // Helper to load initial state from localStorage or default template
@@ -100,14 +100,14 @@ function FlowCanvas({
         const storedRules = JSON.parse(storedRulesRaw);
         if (Array.isArray(storedRules) && storedRules.length > 0) {
           const lastActiveId = localStorage.getItem("nexusflow_active_rule_id");
-          const target = storedRules.find((r) => r.id === lastActiveId) || storedRules[0];
-          return deserializeGraph(target);
+          const target = storedRules.find((r) => r._id === lastActiveId || r.id === lastActiveId) || storedRules[0];
+          return deserializeRule(target);
         }
       }
     } catch (e) {
       console.warn("Could not parse nexusflow_rules from localStorage", e);
     }
-    return deserializeGraph(defaultInitialRule);
+    return deserializeRule(defaultInitialRule);
   };
 
   const initialData = useMemo(() => getInitialGraphState(), []);
@@ -117,8 +117,9 @@ function FlowCanvas({
 
   // Initialize Rule ID & Name on first render
   useEffect(() => {
-    if (initialData.id) setActiveRuleId(initialData.id);
-    if (initialData.ruleName) setRuleName(initialData.ruleName);
+    if (initialData.id || initialData._id) setActiveRuleId(initialData._id || initialData.id);
+    if (initialData.name) setRuleName(initialData.name);
+    if (initialData.description) setRuleDescription(initialData.description);
   }, []);
 
   // Update a node's data in state
@@ -149,19 +150,19 @@ function FlowCanvas({
         const target = nds.find((n) => n.id === nodeId);
         if (!target) return nds;
 
-        const newId = `node-${Date.now()}`;
+        const newId = `${target.type}-${Date.now().toString().slice(-4)}`;
         const newNode = {
           ...target,
           id: newId,
           position: {
-            x: target.position.x + 50,
-            y: target.position.y + 50
+            x: (target.position?.x || 200) + 40,
+            y: (target.position?.y || 200) + 40
           },
           selected: true,
           data: { ...target.data }
         };
 
-        showToast("info", `Duplicated: ${target.data.label || target.id}`);
+        showToast("info", `Duplicated node: ${target.data.label || target.id}`);
         setSelectedNode(newNode);
         return nds.map((n) => ({ ...n, selected: false })).concat(newNode);
       });
@@ -211,12 +212,11 @@ function FlowCanvas({
     setSelectedNode(null);
   }, [setSelectedNode]);
 
-  // Connection Validator Callback (Step 4)
+  // Connection Validator Callback
   const checkConnection = useCallback(
     (connection) => {
       const validation = validateConnectionWithReason(connection, nodes);
       if (!validation.isValid) {
-        // Visual toast alert for invalid connection attempt
         showToast("error", validation.reason);
         return false;
       }
@@ -225,7 +225,7 @@ function FlowCanvas({
     [nodes]
   );
 
-  // Add edge with styled directional arrow marker (Step 13)
+  // Add edge with styled directional arrow marker
   const onConnect = useCallback(
     (params) => {
       setEdges((eds) =>
@@ -278,7 +278,7 @@ function FlowCanvas({
       } else if (nodeType === "condition" || nodeType === "conditionNode") {
         initialData = {
           operator: customData.operator || ">",
-          value: customData.value ?? 80,
+          value: customData.value !== undefined ? Number(customData.value) : 80,
           field: customData.field || "temperature",
           label: customData.label || "Condition (> 80)",
           icon: customData.icon || ">",
@@ -287,17 +287,19 @@ function FlowCanvas({
       } else if (nodeType === "math" || nodeType === "mathNode" || nodeType === "movingAverageNode") {
         initialData = {
           operation: customData.operation || "movingAverage",
-          window: customData.window ?? 5,
+          window: customData.window !== undefined ? Number(customData.window) : 5,
           label: customData.label || "Moving Average",
           icon: customData.icon || "📈",
           ...customData
         };
       } else if (nodeType === "action" || nodeType === "alertNode") {
+        const act = (customData.action || customData.actionType || "ALERT").toUpperCase();
+        const sev = (customData.severity || "HIGH").toUpperCase();
         initialData = {
-          action: (customData.action || customData.actionType || "ALERT").toUpperCase(),
-          actionType: (customData.action || customData.actionType || "ALERT").toUpperCase(),
-          severity: (customData.severity || "HIGH").toUpperCase(),
-          label: customData.label || "Alert Action",
+          action: act,
+          actionType: act,
+          severity: sev,
+          label: customData.label || `${act} Action`,
           icon: customData.icon || "🚨",
           ...customData
         };
@@ -305,7 +307,7 @@ function FlowCanvas({
 
       const newNode = {
         id: newId,
-        type: nodeType,
+        type: nodeType === "sensorNode" ? "sensor" : nodeType === "conditionNode" ? "condition" : nodeType === "alertNode" ? "action" : nodeType,
         position,
         data: {
           ...initialData,
@@ -336,10 +338,19 @@ function FlowCanvas({
         y: event.clientY
       });
 
-      const newId = `${nodeData.nodeType || "node"}-${Date.now().toString().slice(-4)}`;
+      const normalizedType =
+        nodeData.nodeType === "sensorNode"
+          ? "sensor"
+          : nodeData.nodeType === "conditionNode"
+          ? "condition"
+          : nodeData.nodeType === "alertNode"
+          ? "action"
+          : nodeData.nodeType || "sensor";
+
+      const newId = `${normalizedType}-${Date.now().toString().slice(-4)}`;
       const newNode = {
         id: newId,
-        type: nodeData.nodeType,
+        type: normalizedType,
         position,
         data: {
           ...nodeData,
@@ -351,81 +362,175 @@ function FlowCanvas({
       setNodes((nds) => nds.concat(newNode));
       setSelectedNode(newNode);
       setRightPanelTab("config");
-      showToast("info", `Added ${nodeData.label} to canvas.`);
+      showToast("info", `Added ${nodeData.label || normalizedType} to canvas.`);
     },
     [screenToFlowPosition, setNodes, setSelectedNode, setRightPanelTab, handleDuplicateNode, handleDeleteNode]
   );
 
-  // Step 5 & 6 & 8: Save Rule (Validation -> Serialization -> LocalStorage + Backend API)
+  // Step 4, 5, 6: Save Rule (Validation -> Serialization -> LocalStorage + Backend API POST/PUT)
   const handleSaveRule = async () => {
-    // 1. Complete Rule Validation
+    // 1. Pre-save Validation (Graph topology & Node configuration completeness)
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
       showToast("error", validation.message);
       return;
     }
 
-    // 2. Generate Clean Graph JSON using Serializer (Step 6 & 7)
-    const ruleIdToSave = activeRuleId || `rule-${Date.now()}`;
-    const cleanPayload = serializeGraph(ruleName, nodes, edges, ruleIdToSave);
+    setIsSaving(true);
+
+    // 2. Serialization via ruleSerializer.js (Step 1, 2, 3)
+    const cleanPayload = serializeRule(nodes, edges, {
+      name: ruleName,
+      description: ruleDescription,
+      id: activeRuleId,
+      _id: activeRuleId && activeRuleId.length === 24 ? activeRuleId : undefined
+    });
 
     console.log("=========================================");
-    console.log("🚀 NEXUSFLOW RULE GRAPH JSON PAYLOAD");
+    console.log("🚀 SERIALIZED RULE JSON PAYLOAD (POST /api/rules)");
     console.log("=========================================");
     console.log(JSON.stringify(cleanPayload, null, 2));
 
-    // 3. Save to localStorage under `nexusflow_rules` (Step 8)
     try {
+      let savedRuleId = activeRuleId;
+      let backendSaved = false;
+
+      // 3. Connect to backend API: POST /api/rules or PUT /api/rules/:id
+      try {
+        const isMongoId = activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId);
+        let res;
+        if (isMongoId) {
+          try {
+            res = await updateRule(activeRuleId, cleanPayload);
+          } catch (updateErr) {
+            // If update fails because 404, fallback to create; otherwise throw
+            if (updateErr.response?.status === 404) {
+              res = await createRule(cleanPayload);
+            } else {
+              throw updateErr;
+            }
+          }
+        } else {
+          res = await createRule(cleanPayload);
+        }
+
+        const returnedRule = res.data?.rule || res.data;
+        if (returnedRule && (returnedRule._id || returnedRule.id)) {
+          savedRuleId = returnedRule._id || returnedRule.id;
+          setActiveRuleId(savedRuleId);
+          backendSaved = true;
+        }
+      } catch (backendError) {
+        console.warn("Backend save failed:", backendError.response?.data?.message || backendError.message);
+        
+        // Step 11 — Test API Error Handling:
+        // If backend returns: 400 -> "Unable to save rule. Please check the rule configuration."
+        // For network failure -> "Server unavailable. Please try again."
+        if (backendError.response && backendError.response.status === 400) {
+          showToast("error", "Unable to save rule. Please check the rule configuration.");
+          setIsSaving(false);
+          return;
+        } else if (!backendError.response || backendError.code === "ERR_NETWORK" || backendError.message?.includes("Network Error")) {
+          showToast("error", "Server unavailable. Please try again.");
+        } else {
+          showToast("error", backendError.response?.data?.message || "Server unavailable. Please try again.");
+        }
+      }
+
+      // 4. Save to localStorage under `nexusflow_rules`
+      const ruleIdForStorage = savedRuleId || `rule-${Date.now()}`;
+      const ruleForStorage = {
+        ...cleanPayload,
+        id: ruleIdForStorage,
+        _id: savedRuleId && savedRuleId.length === 24 ? savedRuleId : undefined,
+        updatedAt: new Date().toISOString()
+      };
+
       let existingRules = [];
       const stored = localStorage.getItem("nexusflow_rules");
       if (stored) {
-        existingRules = JSON.parse(stored);
+        try {
+          existingRules = JSON.parse(stored);
+        } catch (e) {
+          existingRules = [];
+        }
       }
 
-      const existingIndex = existingRules.findIndex((r) => r.id === ruleIdToSave);
+      const existingIndex = existingRules.findIndex(
+        (r) => (r._id && r._id === savedRuleId) || (r.id && r.id === ruleIdForStorage)
+      );
+
       if (existingIndex >= 0) {
-        existingRules[existingIndex] = cleanPayload;
+        existingRules[existingIndex] = ruleForStorage;
       } else {
-        existingRules.unshift(cleanPayload);
+        existingRules.unshift(ruleForStorage);
       }
 
       localStorage.setItem("nexusflow_rules", JSON.stringify(existingRules));
-      localStorage.setItem("nexusflow_active_rule_id", ruleIdToSave);
-      setActiveRuleId(ruleIdToSave);
+      localStorage.setItem("nexusflow_active_rule_id", ruleIdForStorage);
+      if (!activeRuleId) setActiveRuleId(ruleIdForStorage);
 
-      // 4. Try Backend API (Step 14)
-      try {
-        await createRuleRequest(cleanPayload);
-        showToast("success", `✅ Rule "${ruleName}" saved to Database & LocalStorage!`);
-      } catch (backendError) {
-        const msg = backendError.response?.data?.message || "Saved locally (Backend unauthenticated/offline)";
-        showToast("success", `✅ Rule "${ruleName}" saved locally! (${msg})`);
+      if (backendSaved) {
+        showToast("success", `✅ Rule "${ruleName}" saved successfully to database!`);
+      } else {
+        showToast("info", `Rule "${ruleName}" cached locally.`);
       }
     } catch (e) {
       console.error("Storage error:", e);
       showToast("error", "Failed to save rule.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Step 9 & 10: Load a saved rule from My Rules into canvas
-  const handleLoadSavedRule = (ruleData) => {
-    const deserialized = deserializeGraph(ruleData, {
+  // Step 7: Load a saved rule from My Rules into canvas (GET /api/rules/:id)
+  const handleLoadSavedRule = async (ruleDataOrId) => {
+    let targetRule = ruleDataOrId;
+
+    // If string ID was passed, fetch from backend or localStorage
+    if (typeof ruleDataOrId === "string") {
+      try {
+        const res = await getRuleById(ruleDataOrId);
+        if (res?.data?.rule || res?.data) {
+          targetRule = res.data.rule || res.data;
+        }
+      } catch (err) {
+        console.warn("Backend getRuleById failed, checking localStorage:", err.message);
+        try {
+          const stored = localStorage.getItem("nexusflow_rules");
+          if (stored) {
+            const list = JSON.parse(stored);
+            targetRule = list.find((r) => r._id === ruleDataOrId || r.id === ruleDataOrId);
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (!targetRule) {
+      showToast("error", "Could not load rule.");
+      return;
+    }
+
+    const deserialized = deserializeRule(targetRule, {
+      onChange: handleUpdateNodeData,
+      onUpdate: handleUpdateNodeData,
       onDuplicate: handleDuplicateNode,
       onDelete: handleDeleteNode
     });
 
     setNodes(deserialized.nodes);
     setEdges(deserialized.edges);
-    setRuleName(deserialized.ruleName);
+    setRuleName(deserialized.name || "Untitled Rule");
+    setRuleDescription(deserialized.description || "");
     setActiveRuleId(deserialized.id);
     setSelectedNode(null);
     localStorage.setItem("nexusflow_active_rule_id", deserialized.id);
 
-    showToast("info", `Loaded rule: "${deserialized.ruleName}"`);
+    showToast("info", `Loaded rule: "${deserialized.name}"`);
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
   };
 
-  // Step 9: Automatic rule loading when navigating from Alert Details (e.g. /flow?ruleId=xyz)
+  // Automatic rule loading when navigating from Alert Details (e.g. /flow?ruleId=xyz)
   const [searchParams] = useSearchParams();
   const urlRuleId = searchParams.get("ruleId");
 
@@ -434,7 +539,19 @@ function FlowCanvas({
 
     let isMounted = true;
     const loadRuleFromParam = async () => {
-      // 1. Check localStorage first
+      // 1. Fetch from backend API
+      try {
+        const res = await getRuleByIdRequest(urlRuleId);
+        const fetchedRule = res?.data?.rule || res?.data;
+        if (fetchedRule && isMounted) {
+          handleLoadSavedRule(fetchedRule);
+          return;
+        }
+      } catch (apiErr) {
+        console.warn("Could not load rule from backend API:", apiErr.message);
+      }
+
+      // 2. Check localStorage fallback
       try {
         const storedRulesRaw = localStorage.getItem("nexusflow_rules");
         if (storedRulesRaw) {
@@ -446,22 +563,10 @@ function FlowCanvas({
           );
           if (matched && isMounted) {
             handleLoadSavedRule(matched);
-            return;
           }
         }
       } catch (err) {
         console.warn("Could not load rule from localStorage:", err);
-      }
-
-      // 2. Fetch from backend API
-      try {
-        const res = await getRuleByIdRequest(urlRuleId);
-        const fetchedRule = res?.data?.rule || res?.data;
-        if (fetchedRule && isMounted) {
-          handleLoadSavedRule(fetchedRule);
-        }
-      } catch (apiErr) {
-        console.warn("Could not load rule from backend API:", apiErr.message);
       }
     };
 
@@ -471,13 +576,13 @@ function FlowCanvas({
     };
   }, [urlRuleId]);
 
-  // Step 11: Delete a saved rule from localStorage
+  // Delete a saved rule from localStorage
   const handleDeleteSavedRule = (ruleId) => {
     try {
       const stored = localStorage.getItem("nexusflow_rules");
       if (stored) {
         const parsed = JSON.parse(stored);
-        const filtered = parsed.filter((r) => r.id !== ruleId);
+        const filtered = parsed.filter((r) => r.id !== ruleId && r._id !== ruleId);
         localStorage.setItem("nexusflow_rules", JSON.stringify(filtered));
       }
       if (activeRuleId === ruleId) {
@@ -489,12 +594,13 @@ function FlowCanvas({
     }
   };
 
-  // Step 12: Clear Canvas Handler
+  // Clear Canvas Handler
   const handleConfirmClearCanvas = () => {
     setNodes([]);
     setEdges([]);
     setSelectedNode(null);
     setRuleName("New Rule");
+    setRuleDescription("");
     setActiveRuleId(`rule-${Date.now()}`);
     setClearModalOpen(false);
     showToast("info", "Canvas cleared. Drag new nodes from library.");
@@ -506,6 +612,7 @@ function FlowCanvas({
     setEdges([]);
     setSelectedNode(null);
     setRuleName("New Rule");
+    setRuleDescription("");
     setActiveRuleId(`rule-${Date.now()}`);
     showToast("info", "Started new rule.");
   };
@@ -538,7 +645,7 @@ function FlowCanvas({
         </div>
 
         <div className="canvas-actions">
-          {/* Step 7: + Add Node Quick Menu */}
+          {/* + Add Node Quick Menu */}
           <div className="add-node-dropdown-container">
             <button
               className="btn-canvas-action primary-accent"
@@ -557,20 +664,20 @@ function FlowCanvas({
                   <span className="node-icon">🔌</span>
                   <span>Sensor</span>
                 </button>
-                <div className="add-node-group-title">OPERATIONS</div>
+                <div className="add-node-group-title">CONDITIONS</div>
                 <button
                   className="add-node-menu-item"
-                  onClick={() => handleAddNode("condition", { operator: ">", value: 80, field: "temperature" })}
+                  onClick={() => handleAddNode("condition", { operator: ">", value: 80 })}
                 >
                   <span className="node-icon">⚙️</span>
-                  <span>Condition</span>
+                  <span>Condition (&gt; 80)</span>
                 </button>
                 <button
                   className="add-node-menu-item"
-                  onClick={() => handleAddNode("math", { operation: "movingAverage", window: 5 })}
+                  onClick={() => handleAddNode("condition", { operator: "<", value: 20 })}
                 >
-                  <span className="node-icon">📈</span>
-                  <span>Math</span>
+                  <span className="node-icon">⚙️</span>
+                  <span>Condition (&lt; 20)</span>
                 </button>
                 <div className="add-node-group-title">ACTIONS</div>
                 <button
@@ -578,14 +685,29 @@ function FlowCanvas({
                   onClick={() => handleAddNode("action", { action: "ALERT", severity: "HIGH" })}
                 >
                   <span className="node-icon">🚨</span>
-                  <span>Alert</span>
+                  <span>Alert (High)</span>
                 </button>
                 <button
                   className="add-node-menu-item"
                   onClick={() => handleAddNode("action", { action: "NOTIFICATION", severity: "MEDIUM" })}
                 >
                   <span className="node-icon">🔔</span>
-                  <span>Notification</span>
+                  <span>Notification (Medium)</span>
+                </button>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("action", { action: "SMS", severity: "HIGH" })}
+                >
+                  <span className="node-icon">📱</span>
+                  <span>SMS Action</span>
+                </button>
+                <div className="add-node-group-title">OPERATIONS</div>
+                <button
+                  className="add-node-menu-item"
+                  onClick={() => handleAddNode("math", { operation: "movingAverage", window: 5 })}
+                >
+                  <span className="node-icon">📈</span>
+                  <span>Math / Moving Avg</span>
                 </button>
               </div>
             )}
@@ -593,8 +715,16 @@ function FlowCanvas({
 
           <button
             className="btn-canvas-action"
-            onClick={() => onOpenJsonModal(serializeGraph(ruleName, nodes, edges, activeRuleId))}
-            title="Inspect clean Compiler JSON"
+            onClick={() =>
+              onOpenJsonModal(
+                serializeRule(nodes, edges, {
+                  name: ruleName,
+                  description: ruleDescription,
+                  id: activeRuleId
+                })
+              )
+            }
+            title="Inspect clean Rule JSON Payload"
           >
             🔍 View JSON
           </button>
@@ -615,12 +745,17 @@ function FlowCanvas({
           <button
             className="btn-canvas-action"
             onClick={handleResetSample}
-            title="Reset to default Temperature -> Moving Avg -> Condition -> SMS rule"
+            title="Reset to default Temperature -> Condition -> Alert rule"
           >
             ↺ Reset Demo
           </button>
-          <button className="btn-save-rule" onClick={handleSaveRule} title="Validate & Save Rule">
-            💾 Save Rule
+          <button
+            className="btn-save-rule"
+            onClick={handleSaveRule}
+            disabled={isSaving}
+            title="Validate & Save Rule to Database"
+          >
+            {isSaving ? "💾 Saving..." : "💾 Save Rule"}
           </button>
         </div>
       </div>
@@ -672,6 +807,7 @@ function FlowCanvas({
                   case "conditionNode":
                     return "#f59e0b";
                   case "action":
+                  case "alert":
                   case "alertNode":
                     return "#ef4444";
                   default:
@@ -725,7 +861,7 @@ function FlowCanvas({
         </div>
       </div>
 
-      {/* ─── Step 12: Clear Canvas Confirmation Modal ─── */}
+      {/* ─── Clear Canvas Confirmation Modal ─── */}
       {clearModalOpen && (
         <div className="modal-backdrop" onClick={() => setClearModalOpen(false)}>
           <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
@@ -754,7 +890,8 @@ function FlowCanvas({
 }
 
 export default function FlowBuilder() {
-  const [ruleName, setRuleName] = useState("High Turbine Temperature");
+  const [ruleName, setRuleName] = useState("High Temperature Alert");
+  const [ruleDescription, setRuleDescription] = useState("Temperature exceeds 80°C");
   const [activeRuleId, setActiveRuleId] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [rightPanelTab, setRightPanelTab] = useState("config");
@@ -762,33 +899,51 @@ export default function FlowBuilder() {
 
   return (
     <div className="flow-builder-page">
-      {/* Top Navigation & Rule Name Bar */}
+      {/* Top Navigation & Rule Info Bar */}
       <div className="flow-builder-header">
         <div className="flow-builder-title">
           <h2>NexusFlow Rule Builder</h2>
           <p>Design real-time telemetry processing pipelines & automated threshold triggers</p>
         </div>
 
-        {/* Step 2: Rule Name Input */}
-        <div className="rule-name-input-group">
-          <label htmlFor="rule-name-input">Rule Name:</label>
-          <div className="rule-name-wrapper">
-            <span className="rule-name-icon">🏷️</span>
-            <input
-              id="rule-name-input"
-              type="text"
-              className="rule-name-input"
-              value={ruleName}
-              onChange={(e) => setRuleName(e.target.value)}
-              placeholder="e.g. High Turbine Temperature"
-            />
+        {/* Rule Name & Description Inputs */}
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          <div className="rule-name-input-group">
+            <label htmlFor="rule-name-input">Rule Name:</label>
+            <div className="rule-name-wrapper">
+              <span className="rule-name-icon">🏷️</span>
+              <input
+                id="rule-name-input"
+                type="text"
+                className="rule-name-input"
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
+                placeholder="e.g. High Temperature Alert"
+              />
+            </div>
+          </div>
+
+          <div className="rule-name-input-group">
+            <label htmlFor="rule-desc-input">Description:</label>
+            <div className="rule-name-wrapper">
+              <span className="rule-name-icon">📝</span>
+              <input
+                id="rule-desc-input"
+                type="text"
+                className="rule-name-input"
+                style={{ width: "220px" }}
+                value={ruleDescription}
+                onChange={(e) => setRuleDescription(e.target.value)}
+                placeholder="e.g. Temperature exceeds 80°C"
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Step 1: 3-Column Product Layout (Library | Canvas | Config/Rules) */}
+      {/* 3-Column Product Layout (Library | Canvas | Config/Rules) */}
       <div className="flow-builder-workspace">
-        {/* Left Node / Saved Rules Panel */}
+        {/* Left Node Library Panel */}
         <NodePanel />
 
         {/* Center Flow Canvas */}
@@ -797,6 +952,8 @@ export default function FlowBuilder() {
             <FlowCanvas
               ruleName={ruleName}
               setRuleName={setRuleName}
+              ruleDescription={ruleDescription}
+              setRuleDescription={setRuleDescription}
               activeRuleId={activeRuleId}
               setActiveRuleId={setActiveRuleId}
               selectedNode={selectedNode}
@@ -809,7 +966,7 @@ export default function FlowBuilder() {
         </div>
       </div>
 
-      {/* Step 6 & 7: Clean Graph JSON Viewer Modal */}
+      {/* Clean Graph JSON Viewer Modal */}
       {jsonModalData && (
         <div className="modal-backdrop" onClick={() => setJsonModalData(null)}>
           <div
@@ -817,14 +974,14 @@ export default function FlowBuilder() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <h3>Rule Compiler JSON Payload</h3>
+              <h3>Rule JSON Payload (API Format)</h3>
               <button className="modal-close-btn" onClick={() => setJsonModalData(null)}>
                 ✕
               </button>
             </div>
             <div className="modal-body">
               <p className="modal-desc">
-                Clean serializable graph JSON ready for the Node.js Compiler & RxJS Stream Engine:
+                Clean serializable graph JSON ready for <code>POST /api/rules</code> and the backend Rule Engine:
               </p>
               <pre className="json-code-block">
                 {JSON.stringify(jsonModalData, null, 2)}
@@ -850,4 +1007,3 @@ export default function FlowBuilder() {
     </div>
   );
 }
-

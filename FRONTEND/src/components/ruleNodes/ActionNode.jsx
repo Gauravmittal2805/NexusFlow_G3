@@ -10,20 +10,20 @@ const ACTION_OPTIONS = [
 ];
 
 const SEVERITY_OPTIONS = [
-  { value: "Critical", label: "Critical", color: "#ef4444" },
-  { value: "High", label: "High", color: "#f97316" },
-  { value: "Medium", label: "Medium", color: "#eab308" },
-  { value: "Low", label: "Low", color: "#3b82f6" },
-  { value: "Info", label: "Info", color: "#06b6d4" }
+  { value: "CRITICAL", label: "Critical", color: "#ef4444" },
+  { value: "HIGH", label: "High", color: "#f97316" },
+  { value: "MEDIUM", label: "Medium", color: "#eab308" },
+  { value: "LOW", label: "Low", color: "#3b82f6" },
+  { value: "INFO", label: "Info", color: "#06b6d4" }
 ];
 
 export default function ActionNode({ id, data, selected }) {
   const currentAction = (data.action || data.actionType || "ALERT").toUpperCase();
-  const currentSeverity = data.severity || "High";
+  const currentSeverity = (data.severity || "HIGH").toUpperCase();
   const actionInfo = ACTION_OPTIONS.find((a) => a.value === currentAction) || ACTION_OPTIONS[0];
 
   const handleActionChange = (e) => {
-    const val = e.target.value;
+    const val = e.target.value.toUpperCase();
     const info = ACTION_OPTIONS.find((a) => a.value === val) || ACTION_OPTIONS[0];
     if (data.onChange) {
       data.onChange(id, {
@@ -36,7 +36,7 @@ export default function ActionNode({ id, data, selected }) {
   };
 
   const handleSeverityChange = (e) => {
-    const val = e.target.value;
+    const val = e.target.value.toUpperCase();
     if (data.onChange) {
       data.onChange(id, { severity: val });
     }
@@ -53,7 +53,7 @@ export default function ActionNode({ id, data, selected }) {
           <span className="node-icon">{data.icon || actionInfo.icon}</span>
           <div>
             <span className="node-category-tag">ACTION</span>
-            <span className="node-title">{data.label || `${actionInfo.label} Trigger`}</span>
+            <span className="node-title">{data.label || `${actionInfo.label} Action`}</span>
           </div>
         </div>
         <div className="node-header-actions nodrag" onMouseDown={(e) => e.stopPropagation()}>

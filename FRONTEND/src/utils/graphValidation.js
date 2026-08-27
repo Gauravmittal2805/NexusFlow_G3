@@ -1,24 +1,118 @@
 /**
- * Graph Validation Utilities for NexusFlow Rule Builder
- * Verifies rule pipeline structure and enforces connection integrity rules.
+ * graphValidation.js
+ *
+ * Graph & Node Configuration Validation Utilities for NexusFlow Rule Builder.
+ * Ensures the visual rule graph is structurally sound, fully connected,
+ * free of cycles, and all nodes have complete configurations before saving.
  */
 
+export const VALID_NODE_TYPES = new Set([
+  "sensor",
+  "sensornode",
+  "condition",
+  "conditionnode",
+  "action",
+  "alert",
+  "alertnode",
+  "notification",
+  "math",
+  "mathnode",
+  "movingaverage",
+  "movingaveragenode",
+  "processingnode"
+]);
+
 /**
- * Validates whether a given rule graph is complete and ready for compilation & saving.
- * 
- * Step 5 Validation Checks:
- * 1. At least one node (Rule cannot be empty)
- * 2. At least one Data Source (e.g., Temperature, Pressure)
- * 3. At least one Action node (e.g., SMS Alert, Email Alert)
- * 4. Nodes should be connected (Unconnected node detected)
- * 5. No circular flow: A -> B -> C -> A (Directed Acyclic Graph enforced)
- * 6. Valid path from Data Source to Action node
- * 
- * @param {Array} nodes List of React Flow nodes
- * @param {Array} edges List of React Flow edges
- * @returns {Object} { valid: boolean, message: string, errors: string[] }
+ * Validates individual node configuration fields.
+ * Ensures no incomplete or blank fields are saved.
+ *
+ * @param {Array} nodes - React Flow nodes array
+ * @returns {{ valid: boolean, errors: string[] }}
  */
-export function validateGraph(nodes, edges) {
+export function validateNodeConfig(nodes = []) {
+  const errors = [];
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const rawType = (node.type || "").toLowerCase();
+    const data = node.data || {};
+    const nodeLabel = data.label || node.id || `Node ${i + 1}`;
+
+    if (rawType === "sensor" || rawType === "sensornode") {
+      const sensorId = data.sensorId || data.sensor_id;
+      const field = data.field || data.sensor;
+
+      if (!sensorId || String(sensorId).trim() === "") {
+        errors.push(`Sensor node "${nodeLabel}": Sensor ID is required.`);
+      }
+      if (!field || String(field).trim() === "") {
+        errors.push(`Sensor node "${nodeLabel}": Field is required.`);
+      }
+    } else if (rawType === "condition" || rawType === "conditionnode") {
+      const operator = data.operator;
+      const value = data.value;
+
+      if (!operator || String(operator).trim() === "") {
+        errors.push(`Condition node "${nodeLabel}": Operator is required.`);
+      }
+      if (value === undefined || value === null || value === "" || isNaN(Number(value))) {
+        errors.push(`Condition node "${nodeLabel}": Threshold value is required.`);
+      }
+    } else if (
+      rawType === "action" ||
+      rawType === "alert" ||
+      rawType === "alertnode" ||
+      rawType === "notification"
+    ) {
+      const action = data.action || data.actionType;
+      const severity = data.severity;
+
+      if (!action || String(action).trim() === "") {
+        errors.push(`Action node "${nodeLabel}": Action type is required.`);
+      }
+      if (!severity || String(severity).trim() === "") {
+        errors.push(`Action node "${nodeLabel}": Severity is required.`);
+      }
+    } else if (
+      rawType === "math" ||
+      rawType === "mathnode" ||
+      rawType === "movingaverage" ||
+      rawType === "movingaveragenode" ||
+      rawType === "processingnode"
+    ) {
+      const operation = data.operation;
+      if (!operation || String(operation).trim() === "") {
+        errors.push(`Math node "${nodeLabel}": Operation is required.`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validates graph topology, connectivity, and structural completeness.
+ *
+ * Checks:
+ * 1. At least one node
+ * 2. Sensor node exists
+ * 3. Condition node exists
+ * 4. Action node exists
+ * 5. Unique node IDs
+ * 6. Edges reference existing nodes
+ * 7. Valid node types
+ * 8. All nodes are connected (no isolated nodes or zero edges with multiple nodes)
+ * 9. Directed Acyclic Graph (no cycles)
+ * 10. Path exists from Sensor to Action
+ *
+ * @param {Array} nodes - React Flow nodes
+ * @param {Array} edges - React Flow edges
+ * @returns {{ valid: boolean, message: string, errors: string[] }}
+ */
+export function validateGraphStructure(nodes = [], edges = []) {
   const errors = [];
 
   // Check 1: At least one node
@@ -30,23 +124,95 @@ export function validateGraph(nodes, edges) {
     };
   }
 
-  // Check 2: At least one Data Source
-  const sensorNodes = nodes.filter(
-    (n) => n.type === "sensor" || n.type === "sensorNode" || Boolean(n.data?.sensor || n.data?.field || n.data?.sensorId)
-  );
+  // Check 2, 3, 4: Canonical Category Checks (Sensor, Condition, Action)
+  const sensorNodes = nodes.filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return t === "sensor" || t === "sensornode";
+  });
+
+  const conditionNodes = nodes.filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return t === "condition" || t === "conditionnode";
+  });
+
+  const actionNodes = nodes.filter((n) => {
+    const t = (n.type || "").toLowerCase();
+    return (
+      t === "action" ||
+      t === "alert" ||
+      t === "alertnode" ||
+      t === "notification"
+    );
+  });
+
   if (sensorNodes.length === 0) {
-    errors.push("Add a data source (e.g. Temperature, Pressure).");
+    errors.push("Graph must contain at least one Sensor node.");
   }
-
-  // Check 3: At least one Action node
-  const actionNodes = nodes.filter(
-    (n) => n.type === "action" || n.type === "alertNode" || Boolean(n.data?.action || n.data?.actionType)
-  );
+  if (conditionNodes.length === 0) {
+    errors.push("Graph must contain at least one Condition node.");
+  }
   if (actionNodes.length === 0) {
-    errors.push("Add an action node (e.g. Alert, Notification, SMS).");
+    errors.push("Graph must contain at least one Action node.");
   }
 
-  // If missing sources or actions, report immediately
+  // Check 5: Unique Node IDs & Check 7: Valid node types
+  const seenIds = new Set();
+  for (const node of nodes) {
+    if (!node.id || String(node.id).trim() === "") {
+      errors.push("Every node must have a non-empty ID.");
+    } else if (seenIds.has(node.id)) {
+      errors.push(`Duplicate node ID '${node.id}' detected.`);
+    } else {
+      seenIds.add(node.id);
+    }
+
+    const t = (node.type || "").toLowerCase();
+    if (!VALID_NODE_TYPES.has(t)) {
+      errors.push(`Node '${node.id}' has invalid type '${node.type}'.`);
+    }
+  }
+
+  // Check 6: Edges reference existing nodes
+  const cleanEdges = edges || [];
+  for (const edge of cleanEdges) {
+    if (!edge.source || !seenIds.has(edge.source)) {
+      errors.push(`Edge references unknown source node '${edge.source}'.`);
+    }
+    if (!edge.target || !seenIds.has(edge.target)) {
+      errors.push(`Edge references unknown target node '${edge.target}'.`);
+    }
+  }
+
+  // Check 8: All nodes are connected
+  // Example: Sensor, Condition, Action with no edges -> "Please connect all nodes before saving the rule."
+  if (nodes.length > 1 && cleanEdges.length === 0) {
+    errors.push("Please connect all nodes before saving the rule.");
+  } else if (nodes.length > 1) {
+    const outgoing = {};
+    const incoming = {};
+
+    nodes.forEach((n) => {
+      outgoing[n.id] = [];
+      incoming[n.id] = [];
+    });
+
+    cleanEdges.forEach((e) => {
+      if (outgoing[e.source]) outgoing[e.source].push(e.target);
+      if (incoming[e.target]) incoming[e.target].push(e.source);
+    });
+
+    const unconnectedNodes = nodes.filter((n) => {
+      const hasOut = outgoing[n.id] && outgoing[n.id].length > 0;
+      const hasIn = incoming[n.id] && incoming[n.id].length > 0;
+      return !hasOut && !hasIn;
+    });
+
+    if (unconnectedNodes.length > 0) {
+      errors.push("Please connect all nodes before saving the rule.");
+    }
+  }
+
+  // If there are structural errors up to here, return early
   if (errors.length > 0) {
     return {
       valid: false,
@@ -55,7 +221,7 @@ export function validateGraph(nodes, edges) {
     };
   }
 
-  // Build adjacency graph
+  // Adjacency graph for cycle detection & path reachability
   const outgoing = {};
   const incoming = {};
   const nodeMap = {};
@@ -66,28 +232,13 @@ export function validateGraph(nodes, edges) {
     nodeMap[n.id] = n;
   });
 
-  (edges || []).forEach((e) => {
+  cleanEdges.forEach((e) => {
     if (outgoing[e.source]) outgoing[e.source].push(e.target);
     if (incoming[e.target]) incoming[e.target].push(e.source);
   });
 
-  // Check 4: Unconnected node check
-  // In a valid rule with >1 node, every node must have at least one incoming or outgoing edge.
-  if (nodes.length > 1) {
-    const unconnectedNodes = nodes.filter((n) => {
-      const hasOut = outgoing[n.id] && outgoing[n.id].length > 0;
-      const hasIn = incoming[n.id] && incoming[n.id].length > 0;
-      return !hasOut && !hasIn;
-    });
-
-    if (unconnectedNodes.length > 0) {
-      const names = unconnectedNodes.map((n) => n.data?.label || n.id).join(", ");
-      errors.push(`Unconnected node detected: ${names}. All nodes must be connected.`);
-    }
-  }
-
-  // Check 5: Cycle detection (A -> B -> C -> A) using DFS 3-color algorithm
-  const visitedState = {}; // 0 = unvisited, 1 = visiting (in stack), 2 = visited
+  // Check 9: Cycle Detection (DFS 3-color)
+  const visitedState = {}; // 0 = unvisited, 1 = visiting, 2 = visited
   nodes.forEach((n) => {
     visitedState[n.id] = 0;
   });
@@ -128,7 +279,7 @@ export function validateGraph(nodes, edges) {
     errors.push(`Circular flow detected (${cycleLabels}). Pipeline must be a directed acyclic graph.`);
   }
 
-  // Check 6: Reachability from at least one Data Source to an Action
+  // Check 10: Reachability from Sensor to Action
   const actionIds = new Set(actionNodes.map((n) => n.id));
   let pathReachesAction = false;
 
@@ -151,7 +302,7 @@ export function validateGraph(nodes, edges) {
   });
 
   if (!pathReachesAction) {
-    errors.push("Data Source is not connected to an Action node. Connect them to form a complete pipeline.");
+    errors.push("Sensor node is not connected to an Action node. Connect them to form a complete pipeline.");
   }
 
   if (errors.length > 0) {
@@ -170,20 +321,51 @@ export function validateGraph(nodes, edges) {
 }
 
 /**
- * Edge Connection Validation (Step 4)
- * Enforces structured connection rules and returns detailed reason on invalid connection.
- * 
+ * Full pre-save validation combining graph structure and node configuration checks.
+ *
+ * @param {Array} nodes - React Flow nodes
+ * @param {Array} edges - React Flow edges
+ * @returns {{ valid: boolean, message: string, errors: string[] }}
+ */
+export function validateGraph(nodes = [], edges = []) {
+  // 1. Structural Validation (at least one node, types, connectivity, DAG, Sensor -> Action)
+  const structureResult = validateGraphStructure(nodes, edges);
+  if (!structureResult.valid) {
+    return structureResult;
+  }
+
+  // 2. Node Configuration Validation (non-blank sensorId, field, operator, value, action, etc.)
+  const configResult = validateNodeConfig(nodes);
+  if (!configResult.valid) {
+    return {
+      valid: false,
+      message: configResult.errors[0],
+      errors: configResult.errors
+    };
+  }
+
+  return {
+    valid: true,
+    message: "Rule pipeline is valid and ready to save!",
+    errors: []
+  };
+}
+
+/**
+ * Edge Connection Validation for live interaction on canvas.
+ * Enforces directional connection rules and returns detailed reason on invalid connection.
+ *
  * Rules:
- * 1. Action nodes cannot be data sources (cannot have outgoing edges)
- * 2. Sensor nodes cannot be targets (cannot have incoming edges)
+ * 1. Action nodes cannot have outgoing edges
+ * 2. Sensor nodes cannot have incoming edges
  * 3. Self-connections (Node A -> Node A) are disallowed
  * 4. Direct Sensor -> Action is disallowed (requires processing / condition)
- * 
- * @param {Object} connection { source, target, sourceHandle, targetHandle }
- * @param {Array} nodes List of React Flow nodes
- * @returns {Object} { isValid: boolean, reason?: string }
+ *
+ * @param {Object} connection - { source, target }
+ * @param {Array} nodes - React Flow nodes
+ * @returns {{ isValid: boolean, reason?: string }}
  */
-export function validateConnectionWithReason(connection, nodes) {
+export function validateConnectionWithReason(connection, nodes = []) {
   if (!connection || !nodes) return { isValid: false, reason: "Invalid connection parameters." };
 
   if (connection.source === connection.target) {
@@ -197,24 +379,36 @@ export function validateConnectionWithReason(connection, nodes) {
     return { isValid: false, reason: "Source or Target node not found." };
   }
 
-  const isSourceAction = sourceNode.type === "action" || sourceNode.type === "alertNode" || Boolean(sourceNode.data?.action || sourceNode.data?.actionType);
-  const isTargetSensor = targetNode.type === "sensor" || targetNode.type === "sensorNode" || Boolean(targetNode.data?.sensor || targetNode.data?.field);
-  const isSourceSensor = sourceNode.type === "sensor" || sourceNode.type === "sensorNode" || Boolean(sourceNode.data?.sensor || sourceNode.data?.field);
-  const isTargetAction = targetNode.type === "action" || targetNode.type === "alertNode" || Boolean(targetNode.data?.action || targetNode.data?.actionType);
+  const sourceType = (sourceNode.type || "").toLowerCase();
+  const targetType = (targetNode.type || "").toLowerCase();
+
+  const isSourceAction =
+    sourceType === "action" ||
+    sourceType === "alert" ||
+    sourceType === "alertnode" ||
+    sourceType === "notification";
+
+  const isTargetSensor = sourceType === "sensor" || targetType === "sensor" || targetType === "sensornode";
+  const isSourceSensor = sourceType === "sensor" || sourceType === "sensornode";
+  const isTargetAction =
+    targetType === "action" ||
+    targetType === "alert" ||
+    targetType === "alertnode" ||
+    targetType === "notification";
 
   // Rule 1: Action nodes cannot be data sources
   if (isSourceAction) {
     return {
       isValid: false,
-      reason: "Invalid connection: Action nodes cannot be data sources (no outgoing flow)."
+      reason: "Invalid connection: Action nodes cannot have outgoing connections."
     };
   }
 
   // Rule 2: Sensor nodes cannot be targets
-  if (isTargetSensor) {
+  if (targetType === "sensor" || targetType === "sensornode") {
     return {
       isValid: false,
-      reason: "Invalid connection: Data Source nodes cannot receive input connections."
+      reason: "Invalid connection: Sensor nodes cannot receive incoming connections."
     };
   }
 
@@ -222,7 +416,7 @@ export function validateConnectionWithReason(connection, nodes) {
   if (isSourceSensor && isTargetAction) {
     return {
       isValid: false,
-      reason: "Invalid connection: Direct Sensor → Action is disallowed. Please add a Condition or Processing node."
+      reason: "Invalid connection: Direct Sensor → Action is disallowed. Please connect through a Condition node."
     };
   }
 
@@ -230,9 +424,17 @@ export function validateConnectionWithReason(connection, nodes) {
 }
 
 /**
- * Boolean wrapper for ReactFlow isValidConnection prop
+ * Boolean wrapper for ReactFlow isValidConnection prop.
  */
 export function isValidConnection(connection, nodes) {
   const result = validateConnectionWithReason(connection, nodes);
   return result.isValid;
 }
+
+export default {
+  validateGraph,
+  validateGraphStructure,
+  validateNodeConfig,
+  validateConnectionWithReason,
+  isValidConnection
+};
