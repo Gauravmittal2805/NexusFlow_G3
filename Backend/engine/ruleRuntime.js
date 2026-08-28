@@ -7,74 +7,67 @@
  * The database (MongoDB) stores saved rules.
  * This registry stores RUNNING rules.
  *
- * Registry structure (Step 1)
- * ───────────────────────────
- *
+ * Registry structure
+ * ──────────────────
  *   activeRules  Map<ruleId, RuntimeEntry>
- *   ├── rule-001  → { rule, pipeline, subscription, status: 'RUNNING' }
- *   ├── rule-002  → { rule, pipeline, subscription, status: 'RUNNING' }
- *   └── rule-003  → { rule, pipeline, subscription, status: 'STOPPED' }
+ *   ├── rule-001  → { rule, pipeline, subscription, status: 'RUNNING',  conditionState: 'NORMAL' }
+ *   ├── rule-002  → { rule, pipeline, subscription, status: 'RUNNING',  conditionState: 'TRIGGERED' }
+ *   └── rule-003  → { rule, pipeline, subscription, status: 'STOPPED',  conditionState: 'NORMAL' }
  *
  * RuntimeEntry shape:
  *   {
- *     rule:         Object,              // original rule document
- *     pipeline:     CompiledPipeline,    // output of compileRule()
- *     subscription: Subscription|null,  // RxJS subscription (null when STOPPED)
- *     status:       'RUNNING'|'STOPPED',
- *     startedAt:    Date|null,
- *     stoppedAt:    Date|null,
- *     triggerCount: number              // how many times this rule has fired
+ *     rule:           Object,              // original rule document
+ *     pipeline:       CompiledPipeline,    // output of compileRule()
+ *     subscription:   Subscription|null,  // RxJS subscription (null when STOPPED)
+ *     status:         'RUNNING'|'STOPPED',
+ *     conditionState: 'NORMAL'|'TRIGGERED', // Step 7 state machine
+ *     startedAt:      Date|null,
+ *     stoppedAt:      Date|null,
+ *     triggerCount:   number,
+ *     loadError:      string|null
  *   }
  *
  * Public API
  * ──────────
- *   loadRule(rule)          Step 2  – validate, compile, store (does NOT subscribe)
- *   startRule(ruleId)       Step 3  – subscribe to telemetry$, mark RUNNING
- *   stopRule(ruleId)        Step 4  – unsubscribe, mark STOPPED
- *   reloadRule(rule)        Step 8  – stopRule + loadRule + startRule in one call
- *   activateAll()           Step 7  – load + start all active rules from DB
- *   deactivateAll()                 – stop every RUNNING rule (shutdown)
- *   getStatus()             Step 11 – snapshot of all rule states
- *   getRuleStatus(ruleId)   Step 11 – status of a single rule
+ *   loadRule(rule)          – validate, compile, store (does NOT subscribe)
+ *   startRule(ruleId)       – subscribe to telemetry$, mark RUNNING
+ *   stopRule(ruleId)        – unsubscribe, mark STOPPED
+ *   reloadRule(rule)        – stopRule + loadRule + startRule (Step 11 — edit flow)
+ *   activateAll()           – load + start all active rules from DB
+ *   deactivateAll()         – stop every RUNNING rule (shutdown)
+ *   getStatus()             – snapshot of all rule states (Step 11)
+ *   getRuleStatus(ruleId)   – single-rule status
  *
- * Step 5 — Duplicate prevention:
- *   startRule() checks the registry before subscribing. If a rule is already
- *   RUNNING it is a no-op, preventing double-subscriptions and duplicate alerts.
+ * Error isolation (Step 10):
+ *   Compilation errors are caught per-rule. A failed rule is stored with
+ *   status STOPPED and loadError set. All other rules continue running.
  *
- * Step 9 — Trigger payload:
- *   Every match produces a structured trigger event:
- *   {
- *     ruleId, ruleName, sensorId, timestamp,
- *     value, field, operator, threshold,
- *     action, severity
- *   }
- *   This is forwarded to alertService and emitted via Socket.IO.
+ * State machine (Step 7):
+ *   NORMAL  ──► telemetry arrives, condition TRUE  ──► TRIGGERED → alert
+ *   TRIGGERED ► telemetry arrives, condition FALSE ──► NORMAL    → recovery
+ *   TRIGGERED ► telemetry arrives, condition TRUE  ──► suppressed by cooldown
  */
 
 'use strict';
 
-const { telemetry$ }              = require('../compiler/telemetryStream');
+const { telemetry$ }                  = require('../compiler/telemetryStream');
 const { compileRule, CompilationError } = require('../compiler/ruleCompiler');
-const { processRuleTrigger }      = require('../services/alertService');
-const ruleService                 = require('../services/ruleService');
+const { buildExecutionResult,
+        buildRecoveryResult,
+        CONDITION_STATE }             = require('./executionResult');
+const { processExecutionResult }      = require('../services/alertService');
+const ruleService                     = require('../services/ruleService');
 
-// ── Status constants (Step 11) ────────────────────────────────────────────────
+// ── Status constants ──────────────────────────────────────────────────────────
 
 const STATUS = Object.freeze({
   RUNNING: 'RUNNING',
   STOPPED: 'STOPPED',
 });
 
-// ── Registry (Step 1) ─────────────────────────────────────────────────────────
+// ── Registry ──────────────────────────────────────────────────────────────────
 
-/**
- * The in-memory registry of all known rule entries.
- *
- * Key   → ruleId (string)
- * Value → RuntimeEntry
- *
- * @type {Map<string, RuntimeEntry>}
- */
+/** @type {Map<string, RuntimeEntry>} */
 const activeRules = new Map();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,155 +75,6 @@ const activeRules = new Map();
 function resolveId(rule) {
   return rule._id ? String(rule._id) : rule.id || 'unknown';
 }
-
-/**
- * Builds the structured trigger payload (Step 9).
- *
- * {
- *   ruleId, ruleName, sensorId, timestamp,
- *   value, field, operator, threshold,
- *   action, severity
- * }
- */
-function buildTriggerPayload(rule, result) {
-  const { ruleId, ruleName, sensorId, context, outputs } = result;
-
-  const condOut = outputs.find(
-    (o) => o.type === 'condition' || o.type === 'conditionNode'
-  );
-  const alertOut = outputs.find(
-    (o) => o.type === 'alert' || o.type === 'alertNode'
-  );
-
-  return {
-    ruleId,
-    ruleName,
-    sensorId,
-    timestamp:  new Date().toISOString(),
-    // Condition details — what was evaluated
-    field:      condOut?.output?.field      ?? context.matchedField ?? null,
-    operator:   condOut?.output?.operator   ?? null,
-    threshold:  condOut?.output?.threshold  ?? null,
-    value:      condOut?.output?.actual     ?? null,
-    // Alert node details — what action to take
-    action:     alertOut?.output?.action    ?? context.alertAction   ?? 'NOTIFICATION',
-    severity:   alertOut?.output?.severity  ?? context.alertSeverity ?? 'HIGH',
-  };
-}
-
-/**
- * Handles a rule match: logs it, emits Socket.IO, calls alertService (Step 9 & 15).
- */
-async function handleTrigger(rule, result) {
-  const payload = buildTriggerPayload(rule, result);
-
-  console.log(
-    `[RuleRuntime] ✅ TRIGGERED  "${payload.ruleName}" | ` +
-    `Sensor: ${payload.sensorId} | ` +
-    `${payload.field} ${payload.operator} ${payload.threshold} ` +
-    `(actual: ${payload.value}) | ` +
-    `${payload.action} / ${payload.severity}`
-  );
-
-  // Increment trigger counter in registry
-  const entry = activeRules.get(payload.ruleId);
-  if (entry) entry.triggerCount++;
-
-  // Emit rule:triggered via Socket.IO
-  try {
-    const { getIo } = require('../websocket/telemetrySocket');
-    getIo().emit('rule:triggered', {
-      ruleId:    payload.ruleId,
-      ruleName:  payload.ruleName,
-      sensorId:  payload.sensorId,
-      timestamp: payload.timestamp,
-    });
-  } catch (_) {
-    // Not available in test environments
-  }
-
-  // Reconstruct telemetry object for alertService message generator
-  const telemetryForAlert = {
-    sensorId:           payload.sensorId,
-    timestamp:          payload.timestamp,
-    ...(payload.field   ? { [payload.field]: payload.value } : {}),
-  };
-
-  // Persist alert + broadcast alert:new (Step 15)
-  try {
-    await processRuleTrigger(rule, telemetryForAlert);
-  } catch (err) {
-    console.error(
-      `[RuleRuntime] Alert creation failed for "${payload.ruleName}":`,
-      err.message
-    );
-  }
-}
-
-// ── Step 2 — loadRule() ───────────────────────────────────────────────────────
-
-/**
- * Validate and compile a rule, then store it in the registry as STOPPED.
- *
- * Does NOT subscribe to telemetry$.  Call startRule(ruleId) after loading
- * to begin execution.
- *
- * Inactive rules (isActive === false) are stored with status STOPPED and are
- * never subscribed (Step 7).
- *
- * @param {Object} rule - Rule document (plain object or Mongoose lean)
- * @returns {{ ok: boolean, ruleId: string, reason?: string }}
- */
-function loadRule(rule) {
-  const ruleId   = resolveId(rule);
-  const ruleName = rule.name || 'Unnamed Rule';
-
-  // If already in registry, unsubscribe first to avoid orphan subscriptions
-  if (activeRules.has(ruleId)) {
-    _unsubscribe(ruleId);
-  }
-
-  let pipeline;
-  try {
-    pipeline = compileRule(rule);
-  } catch (err) {
-    const reason = err instanceof CompilationError
-      ? `Compilation failed: ${err.errors.join('; ')}`
-      : `Unexpected error: ${err.message}`;
-
-    console.error(`[RuleRuntime] ❌ Load failed for "${ruleName}" (${ruleId}): ${reason}`);
-
-    // Store as STOPPED so getStatus() shows it
-    activeRules.set(ruleId, {
-      rule,
-      pipeline:      null,
-      subscription:  null,
-      status:        STATUS.STOPPED,
-      startedAt:     null,
-      stoppedAt:     new Date(),
-      triggerCount:  0,
-      loadError:     reason,
-    });
-
-    return { ok: false, ruleId, reason };
-  }
-
-  activeRules.set(ruleId, {
-    rule,
-    pipeline,
-    subscription:  null,
-    status:        STATUS.STOPPED,
-    startedAt:     null,
-    stoppedAt:     null,
-    triggerCount:  0,
-    loadError:     null,
-  });
-
-  console.log(`[RuleRuntime] 📦 Loaded  "${ruleName}" (${ruleId})`);
-  return { ok: true, ruleId };
-}
-
-// ── Internal unsubscribe helper ───────────────────────────────────────────────
 
 function _unsubscribe(ruleId) {
   const entry = activeRules.get(ruleId);
@@ -243,67 +87,228 @@ function _unsubscribe(ruleId) {
   entry.stoppedAt    = new Date();
 }
 
-// ── Step 3 — startRule() ──────────────────────────────────────────────────────
+// ── Match handler — Step 1,2,3,4,5,6,7 ───────────────────────────────────────
+
+/**
+ * Called by the RxJS pipeline every time a rule evaluates TRUE.
+ *
+ * Flow:
+ *   PipelineResult (from compiled.run onMatch)
+ *         ↓
+ *   buildExecutionResult()   ← canonical RuleExecutionResult (Step 1)
+ *         ↓
+ *   processExecutionResult() ← cooldown + DB + Socket.IO (Steps 2,5,6)
+ *
+ * @param {Object} rule           - rule document
+ * @param {Object} pipelineResult - PipelineResult from ruleCompiler.run()
+ */
+async function _handleMatch(rule, pipelineResult) {
+  const entry = activeRules.get(pipelineResult.ruleId);
+
+  // Build the canonical execution result (Step 1)
+  const execResult = buildExecutionResult(pipelineResult, rule);
+
+  // State transition: NORMAL → TRIGGERED
+  const prevState = entry?.conditionState ?? CONDITION_STATE.NORMAL;
+  if (entry) {
+    entry.conditionState = CONDITION_STATE.TRIGGERED;
+    entry.triggerCount++;
+  }
+
+  console.log(
+    `[RuleRuntime] ✅ MATCH  "${execResult.ruleName}" | ` +
+    `Sensor: ${execResult.sensorId} | ` +
+    `${execResult.field} ${execResult.operator} ${execResult.threshold} ` +
+    `= ${execResult.value} | ${execResult.severity} | prev: ${prevState}`
+  );
+
+  // Delegate to alertService (Steps 2, 5, 6, 7)
+  try {
+    await processExecutionResult(execResult);
+  } catch (err) {
+    console.error(
+      `[RuleRuntime] Alert creation failed for "${execResult.ruleName}":`,
+      err.message
+    );
+  }
+}
+
+/**
+ * Called when a telemetry reading is evaluated as FALSE for a rule that was
+ * previously TRIGGERED — implements Step 7 state recovery.
+ *
+ * @param {string} ruleId
+ * @param {string} ruleName
+ * @param {string} sensorId
+ * @param {string|null} field
+ */
+async function _handleRecovery(ruleId, ruleName, sensorId, field) {
+  const entry = activeRules.get(ruleId);
+  if (!entry || entry.conditionState !== CONDITION_STATE.TRIGGERED) return;
+
+  entry.conditionState = CONDITION_STATE.NORMAL;
+
+  const recoveryResult = buildRecoveryResult(ruleId, ruleName, sensorId, field);
+
+  try {
+    await processExecutionResult(recoveryResult);
+  } catch (_) {
+    // Recovery is best-effort — don't crash on error
+  }
+}
+
+// ── loadRule() ────────────────────────────────────────────────────────────────
+
+/**
+ * Compile a rule and store it in the registry as STOPPED.
+ * Does NOT subscribe to telemetry$.
+ *
+ * Error isolation (Step 10): compilation errors are caught here. A failed
+ * rule is stored with pipeline=null and loadError set. All other rules
+ * continue unaffected.
+ *
+ * @param {Object} rule
+ * @returns {{ ok: boolean, ruleId: string, reason?: string }}
+ */
+function loadRule(rule) {
+  const ruleId   = resolveId(rule);
+  const ruleName = rule.name || 'Unnamed Rule';
+
+  // Tear down any existing subscription before recompiling
+  if (activeRules.has(ruleId)) {
+    _unsubscribe(ruleId);
+  }
+
+  let pipeline;
+  try {
+    pipeline = compileRule(rule);
+  } catch (err) {
+    // Step 10 — catch compile error, log it, keep other rules running
+    const reason = err instanceof CompilationError
+      ? `Compilation failed: ${err.errors.join('; ')}`
+      : `Unexpected error: ${err.message}`;
+
+    console.error(`[RuleRuntime] ❌ Load failed  "${ruleName}" (${ruleId}): ${reason}`);
+
+    activeRules.set(ruleId, {
+      rule,
+      pipeline:       null,
+      subscription:   null,
+      status:         STATUS.STOPPED,
+      conditionState: CONDITION_STATE.NORMAL,
+      startedAt:      null,
+      stoppedAt:      new Date(),
+      triggerCount:   0,
+      loadError:      reason,
+    });
+
+    return { ok: false, ruleId, reason };
+  }
+
+  activeRules.set(ruleId, {
+    rule,
+    pipeline,
+    subscription:   null,
+    status:         STATUS.STOPPED,
+    conditionState: CONDITION_STATE.NORMAL,
+    startedAt:      null,
+    stoppedAt:      null,
+    triggerCount:   0,
+    loadError:      null,
+  });
+
+  console.log(`[RuleRuntime] 📦 Loaded  "${ruleName}" (${ruleId})`);
+  return { ok: true, ruleId };
+}
+
+// ── startRule() ───────────────────────────────────────────────────────────────
 
 /**
  * Subscribe a loaded rule to the live telemetry$ stream.
  *
- * Flow (Step 3):
- *   startRule(ruleId)
- *         ↓
- *   compileRule() [already done by loadRule]
- *         ↓
- *   pipeline.run(telemetry$, onMatch)
- *         ↓
- *   store subscription → mark RUNNING
- *
  * Guards:
- *   - Rule must be loaded (present in activeRules)
- *   - Rule must be active (isActive === true) — Step 7
- *   - Rule must not already be RUNNING — Step 5 (duplicate prevention)
- *   - pipeline must have compiled successfully
+ *   - Rule must exist in registry (call loadRule first)
+ *   - isActive must be true
+ *   - Must not already be RUNNING (duplicate prevention)
+ *   - Pipeline must have compiled successfully
+ *
+ * The pipeline's onMatch fires _handleMatch (TRUE condition).
+ * The recovery path is tracked via entry.conditionState so that
+ * when condition flips FALSE, _handleRecovery is invoked on the
+ * NEXT non-matching emission (handled by a separate subscription tap).
  *
  * @param {string} ruleId
- * @returns {boolean} true if started, false if skipped
+ * @returns {boolean}
  */
 function startRule(ruleId) {
   const entry = activeRules.get(ruleId);
 
   if (!entry) {
-    console.warn(`[RuleRuntime] startRule: rule "${ruleId}" not in registry. Call loadRule() first.`);
+    console.warn(`[RuleRuntime] startRule: "${ruleId}" not in registry — call loadRule() first`);
     return false;
   }
 
-  // Step 7: Inactive rules must not execute
   if (!entry.rule.isActive) {
     console.log(`[RuleRuntime] ⏭  Skipping inactive rule "${entry.rule.name}" (${ruleId})`);
     return false;
   }
 
-  // Step 5: Prevent duplicate subscriptions
   if (entry.status === STATUS.RUNNING && entry.subscription && !entry.subscription.closed) {
-    console.log(`[RuleRuntime] ⚠️  Rule "${entry.rule.name}" already RUNNING — skipping duplicate start`);
+    console.log(`[RuleRuntime] ⚠️  Already RUNNING "${entry.rule.name}" — duplicate start skipped`);
     return false;
   }
 
-  // Compilation may have failed during loadRule
   if (!entry.pipeline) {
-    console.error(`[RuleRuntime] Cannot start "${entry.rule.name}" — no compiled pipeline (check loadError)`);
+    console.error(`[RuleRuntime] Cannot start "${entry.rule.name}" — no pipeline (check loadError)`);
     return false;
   }
 
   const rule = entry.rule;
 
-  const subscription = entry.pipeline.run(telemetry$, (result) => {
-    handleTrigger(rule, result).catch((err) =>
-      console.error(`[RuleRuntime] handleTrigger error for "${rule.name}":`, err.message)
+  // Wire onMatch — fires every time condition is TRUE
+  const subscription = entry.pipeline.run(telemetry$, (pipelineResult) => {
+    _handleMatch(rule, pipelineResult).catch((err) =>
+      console.error(`[RuleRuntime] _handleMatch error for "${rule.name}":`, err.message)
     );
   });
 
-  entry.subscription = subscription;
-  entry.status       = STATUS.RUNNING;
-  entry.startedAt    = new Date();
-  entry.stoppedAt    = null;
+  // Wire recovery detection — peek at every emission (matched or not)
+  // by also subscribing to the raw telemetry$ for this rule.
+  // We use a lightweight side-channel: track conditionState and emit
+  // recovery when we see the entry flip from TRIGGERED back to non-matching.
+  // This is done inside _handleMatch / processExecutionResult via the
+  // conditionStateMap in alertService. The runtime reflects it back:
+  const { Subject } = require('rxjs');
+  const recoveryCheckSub = telemetry$.subscribe((telemetryData) => {
+    const e = activeRules.get(ruleId);
+    if (!e || e.status !== STATUS.RUNNING) return;
+    if (e.conditionState !== CONDITION_STATE.TRIGGERED) return;
+
+    // Run the pipeline synchronously to check if condition is still true
+    const checkResult = e.pipeline.runOnce({ ...telemetryData });
+    if (!checkResult.matched && checkResult.sensorId === (telemetryData.sensorId || 'unknown')) {
+      // Condition flipped FALSE — trigger recovery
+      const condOut  = checkResult.outputs.find(
+        (o) => o.type === 'condition' || o.type === 'conditionNode'
+      );
+      const field = condOut?.output?.field ?? e.rule.nodes?.find(
+        (n) => n.type === 'condition' || n.type === 'conditionNode'
+      )?.data?.field ?? null;
+
+      _handleRecovery(ruleId, rule.name, telemetryData.sensorId || 'unknown', field)
+        .catch(() => {});
+    }
+  });
+
+  // Combine both into one logical subscription group
+  // We store subscription as the primary (the onMatch one)
+  // and track the recovery sub on the entry
+  entry.subscription    = subscription;
+  entry._recoverySub    = recoveryCheckSub;
+  entry.status          = STATUS.RUNNING;
+  entry.conditionState  = CONDITION_STATE.NORMAL;
+  entry.startedAt       = new Date();
+  entry.stoppedAt       = null;
 
   console.log(
     `[RuleRuntime] ▶  RUNNING  "${rule.name}" (${ruleId}) | ` +
@@ -313,13 +318,11 @@ function startRule(ruleId) {
   return true;
 }
 
-// ── Step 4 — stopRule() ───────────────────────────────────────────────────────
+// ── stopRule() ────────────────────────────────────────────────────────────────
 
 /**
- * Unsubscribe a running rule pipeline and mark it STOPPED.
- *
- * Safe to call on rules that are already STOPPED (no-op).
- * The rule remains in the registry — call loadRule() to remove it.
+ * Unsubscribe a running rule and mark it STOPPED.
+ * Safe to call on already-STOPPED rules (no-op).
  *
  * @param {string} ruleId
  */
@@ -327,41 +330,37 @@ function stopRule(ruleId) {
   const entry = activeRules.get(ruleId);
 
   if (!entry) {
-    console.warn(`[RuleRuntime] stopRule: rule "${ruleId}" not found in registry`);
+    console.warn(`[RuleRuntime] stopRule: "${ruleId}" not found in registry`);
     return;
   }
 
   if (entry.status === STATUS.STOPPED) {
-    console.log(`[RuleRuntime] stopRule: rule "${entry.rule.name}" already STOPPED`);
+    console.log(`[RuleRuntime] stopRule: "${entry.rule.name}" already STOPPED`);
     return;
   }
+
+  // Unsubscribe recovery side-channel first
+  if (entry._recoverySub && !entry._recoverySub.closed) {
+    entry._recoverySub.unsubscribe();
+  }
+  entry._recoverySub = null;
 
   _unsubscribe(ruleId);
 
   console.log(`[RuleRuntime] ⏹  STOPPED  "${entry.rule.name}" (${ruleId})`);
 }
 
-// ── Step 8 — reloadRule() ─────────────────────────────────────────────────────
+// ── reloadRule() — Step 11 ────────────────────────────────────────────────────
 
 /**
- * Replace a running pipeline with a freshly compiled one.
+ * Stop old pipeline, recompile from updated graph, start fresh.
+ * Used when a rule is edited (Member 3 changes condition/nodes).
  *
- * Used when a rule is edited — ensures the runtime uses the latest graph
- * and never executes a stale compiled pipeline.
- *
- * Flow (Step 8):
- *   stopRule(ruleId)    ← tears down old subscription
- *         ↓
- *   loadRule(newRule)   ← recompiles from updated graph
- *         ↓
- *   startRule(ruleId)   ← subscribes new pipeline
- *
- * @param {Object} updatedRule - Updated rule document (same _id, new nodes/edges)
- * @returns {boolean} true if successfully reloaded and started
+ * @param {Object} updatedRule
+ * @returns {boolean}
  */
 function reloadRule(updatedRule) {
   const ruleId = resolveId(updatedRule);
-
   console.log(`[RuleRuntime] 🔄 Reloading "${updatedRule.name}" (${ruleId})`);
 
   stopRule(ruleId);
@@ -372,22 +371,20 @@ function reloadRule(updatedRule) {
   return startRule(ruleId);
 }
 
-// ── Step 7 — activateAll() ────────────────────────────────────────────────────
+// ── activateAll() ─────────────────────────────────────────────────────────────
 
 /**
- * Fetch all active rules from MongoDB, load and start each one.
- * Called once at server startup after the DB connection is ready.
+ * Load and start all active rules from MongoDB.
+ * Called once at server startup.
  *
- * Only rules with isActive === true are loaded and started.
+ * Step 10: Each rule is compiled independently. A failure in one rule
+ * does not prevent others from starting.
  *
  * @returns {Promise<{ loaded: number, started: number, failed: number }>}
  */
 async function activateAll() {
   console.log('[RuleRuntime] 🚀 Activating all active rules...');
-
-  let loaded  = 0;
-  let started = 0;
-  let failed  = 0;
+  let loaded = 0, started = 0, failed = 0;
 
   try {
     const rules = await ruleService.getActiveRules();
@@ -401,14 +398,11 @@ async function activateAll() {
       const loadResult = loadRule(rule);
       if (!loadResult.ok) { failed++; continue; }
       loaded++;
-
-      const ok = startRule(loadResult.ruleId);
-      ok ? started++ : failed++;
+      startRule(loadResult.ruleId) ? started++ : failed++;
     }
 
     console.log(
-      `[RuleRuntime] Activation complete — ` +
-      `${loaded} loaded, ${started} started, ${failed} failed`
+      `[RuleRuntime] Activation complete — ${loaded} loaded, ${started} started, ${failed} failed`
     );
   } catch (err) {
     console.error('[RuleRuntime] activateAll() error:', err.message);
@@ -418,56 +412,50 @@ async function activateAll() {
 }
 
 /**
- * Stop every running subscription.
- * Called during graceful server shutdown.
+ * Stop all running subscriptions. Called during graceful shutdown.
  */
 function deactivateAll() {
   let count = 0;
   for (const [ruleId, entry] of activeRules) {
     if (entry.status === STATUS.RUNNING) {
-      _unsubscribe(ruleId);
+      stopRule(ruleId);
       count++;
     }
   }
   console.log(`[RuleRuntime] 🛑 Deactivated ${count} running rule(s).`);
 }
 
-// ── Step 11 — getStatus() / getRuleStatus() ───────────────────────────────────
+// ── getStatus() — Step 11 ─────────────────────────────────────────────────────
 
 /**
  * Returns a full snapshot of all rules in the registry.
- *
- * Example output:
- *   [
- *     { ruleId: 'rule-001', ruleName: 'High Temp', status: 'RUNNING',  triggerCount: 14 },
- *     { ruleId: 'rule-002', ruleName: 'Low RPM',   status: 'STOPPED',  triggerCount:  0 },
- *   ]
+ * Includes RUNNING/STOPPED status, conditionState, triggerCount, and
+ * loadError for failed rules.
  *
  * @returns {Array<RuntimeStatusEntry>}
  */
 function getStatus() {
   const snapshot = [];
-
   for (const [ruleId, entry] of activeRules) {
     snapshot.push({
       ruleId,
-      ruleName:      entry.rule.name || 'Unnamed Rule',
-      isActive:      entry.rule.isActive,
-      status:        entry.status,
-      executionOrder: entry.pipeline?.executionOrder ?? [],
-      startedAt:     entry.startedAt,
-      stoppedAt:     entry.stoppedAt,
-      triggerCount:  entry.triggerCount,
-      loadError:     entry.loadError ?? null,
+      ruleName:           entry.rule.name || 'Unnamed Rule',
+      isActive:           entry.rule.isActive,
+      status:             entry.status,
+      conditionState:     entry.conditionState,
+      executionOrder:     entry.pipeline?.executionOrder ?? [],
+      startedAt:          entry.startedAt,
+      stoppedAt:          entry.stoppedAt,
+      triggerCount:       entry.triggerCount,
+      loadError:          entry.loadError ?? null,
       subscriptionClosed: entry.subscription?.closed ?? null,
     });
   }
-
   return snapshot;
 }
 
 /**
- * Returns the status of a single rule.
+ * Returns the status of a single rule, or null if not found.
  *
  * @param {string} ruleId
  * @returns {RuntimeStatusEntry|null}
@@ -475,17 +463,17 @@ function getStatus() {
 function getRuleStatus(ruleId) {
   const entry = activeRules.get(ruleId);
   if (!entry) return null;
-
   return {
     ruleId,
-    ruleName:      entry.rule.name || 'Unnamed Rule',
-    isActive:      entry.rule.isActive,
-    status:        entry.status,
-    executionOrder: entry.pipeline?.executionOrder ?? [],
-    startedAt:     entry.startedAt,
-    stoppedAt:     entry.stoppedAt,
-    triggerCount:  entry.triggerCount,
-    loadError:     entry.loadError ?? null,
+    ruleName:           entry.rule.name || 'Unnamed Rule',
+    isActive:           entry.rule.isActive,
+    status:             entry.status,
+    conditionState:     entry.conditionState,
+    executionOrder:     entry.pipeline?.executionOrder ?? [],
+    startedAt:          entry.startedAt,
+    stoppedAt:          entry.stoppedAt,
+    triggerCount:       entry.triggerCount,
+    loadError:          entry.loadError ?? null,
     subscriptionClosed: entry.subscription?.closed ?? null,
   };
 }
@@ -493,9 +481,9 @@ function getRuleStatus(ruleId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
-  // Registry
   activeRules,
   STATUS,
+  CONDITION_STATE,
 
   // Core lifecycle
   loadRule,
@@ -503,15 +491,15 @@ module.exports = {
   stopRule,
   reloadRule,
 
-  // Bulk operations
+  // Bulk
   activateAll,
   deactivateAll,
 
-  // Status (Step 11)
+  // Status
   getStatus,
   getRuleStatus,
 
   // Exposed for testing
-  buildTriggerPayload,
-  handleTrigger,
+  _handleMatch,
+  _handleRecovery,
 };
