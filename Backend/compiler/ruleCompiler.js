@@ -492,6 +492,7 @@ function run(rxPipe, ruleId, ruleName, telemetry$, onMatch) {
           stoppedAt: null,
           reason:    null,
           outputs:   packet.outputs,
+          telemetry: packet.telemetry,
         });
       }
     },
