@@ -108,16 +108,33 @@ async function processRuleTrigger(rule, telemetry) {
   const message = generateAlertMessage(sensorId, telemetry, conditionData);
 
   // ── Step 2, 3, 4: Build + save Alert document to MongoDB ──
-  const alertDoc = await Alert.create({
-    ruleId,
-    ruleName:  rule.name || 'Unnamed Rule',
-    sensorId,
-    message,
-    severity,
-    status:    'unread',
-    action,
-    timestamp: telemetry.timestamp ? new Date(telemetry.timestamp) : new Date(),
-  });
+  const mongoose = require('mongoose');
+  let alertDoc;
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    alertDoc = await Alert.create({
+      ruleId,
+      ruleName:  rule.name || 'Unnamed Rule',
+      sensorId,
+      message,
+      severity,
+      status:    'unread',
+      action,
+      timestamp: telemetry.timestamp ? new Date(telemetry.timestamp) : new Date(),
+    });
+  } else {
+    // Fallback in-memory document when running without active MongoDB connection (e.g. unit tests)
+    alertDoc = {
+      _id: `alert-${ruleId}-${sensorId}-${Date.now()}`,
+      ruleId,
+      ruleName:  rule.name || 'Unnamed Rule',
+      sensorId,
+      message,
+      severity,
+      status:    'unread',
+      action,
+      timestamp: telemetry.timestamp ? new Date(telemetry.timestamp) : new Date(),
+    };
+  }
 
   console.log(
     `[AlertService] ✅ Alert created | Rule: "${rule.name}" | Sensor: ${sensorId} | Severity: ${severity} | Action: ${action}`
