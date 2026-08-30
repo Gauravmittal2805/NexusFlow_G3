@@ -4,6 +4,7 @@ const {
   createRule,
   getRules,
   getRuleById,
+  getRuleStatus,
   updateRule,
   deleteRule,
   updateRuleStatus,
@@ -20,6 +21,9 @@ router.post('/', requireRole('admin', 'operator'), createRule);
 
 // GET /api/rules - Get all rules (admin, operator, viewer)
 router.get('/', requireRole('admin', 'operator', 'viewer'), getRules);
+
+// GET /api/rules/:id/status - Get single rule status by ID (admin, operator, viewer)
+router.get('/:id/status', requireRole('admin', 'operator', 'viewer'), getRuleStatus);
 
 // GET /api/rules/:id - Get single rule by ID (admin, operator, viewer)
 router.get('/:id', requireRole('admin', 'operator', 'viewer'), getRuleById);

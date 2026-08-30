@@ -1,6 +1,6 @@
 const Rule = require('../models/Rule');
 const { validateGraph } = require('../compiler/graphValidator');
-const { startRule, stopRule, restartRule } = require('../compiler/rxjsRuleEngine');
+const { startRule, stopRule, restartRule, compiledRules } = require('../compiler/rxjsRuleEngine');
 
 /**
  * Helper function to validate React Flow graph rule structure
@@ -379,10 +379,70 @@ const toggleRuleStatus = async (req, res) => {
   }
 };
 
+// @desc    Get rule runtime status (GET /api/rules/:id/status) - Step 1 & 2
+// @access  Private
+const getRuleStatus = async (req, res) => {
+  try {
+    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, createdBy: req.user.id };
+    const rule = await Rule.findOne(filter);
+
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+
+    const ruleIdStr = String(rule._id);
+    const isCompiledAndRunning = compiledRules.has(ruleIdStr);
+
+    let status = 'INACTIVE';
+    if (rule.isActive) {
+      status = isCompiledAndRunning ? 'RUNNING' : 'ACTIVE';
+    } else {
+      status = 'INACTIVE';
+    }
+
+    return res.status(200).json({
+      success: true,
+      ruleId: ruleIdStr,
+      ruleName: rule.name,
+      isActive: Boolean(rule.isActive),
+      isRunning: isCompiledAndRunning,
+      status, // 'RUNNING', 'ACTIVE', 'INACTIVE'
+      lastTriggered: rule.lastTriggered || null,
+      lastTriggeredSensor: rule.lastTriggeredSensor || null,
+      lastTriggeredValue: rule.lastTriggeredValue ?? null,
+      rule: {
+        _id: rule._id,
+        name: rule.name,
+        isActive: rule.isActive,
+        status,
+        lastTriggered: rule.lastTriggered,
+        lastTriggeredSensor: rule.lastTriggeredSensor,
+        lastTriggeredValue: rule.lastTriggeredValue,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching rule status:', error);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rule not found',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching rule status',
+    });
+  }
+};
+
 module.exports = {
   createRule,
   getRules,
   getRuleById,
+  getRuleStatus,
   updateRule,
   deleteRule,
   updateRuleStatus,

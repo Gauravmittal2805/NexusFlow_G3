@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { getRules, deleteRule, updateRuleStatus } from "../services/ruleService";
+import { subscribeToRuleTrigger } from "../services/socket";
 
 export default function SavedRulesPanel({
   activeRuleId,
@@ -14,6 +15,7 @@ export default function SavedRulesPanel({
   const [loading, setLoading] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [flashingRuleId, setFlashingRuleId] = useState(null);
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
@@ -52,6 +54,43 @@ export default function SavedRulesPanel({
   useEffect(() => {
     fetchRules();
   }, [fetchRules, activeRuleId]);
+
+  // Step 5 & 6: Real-time update on rule:triggered without refresh
+  useEffect(() => {
+    const unsubscribe = subscribeToRuleTrigger((data) => {
+      if (!data) return;
+
+      const triggerRuleId = data.ruleId;
+      const triggerRuleName = data.ruleName;
+
+      setSavedRules((prevRules) =>
+        prevRules.map((rule) => {
+          const ruleId = rule._id || rule.id;
+          const isMatch =
+            (triggerRuleId && (ruleId === triggerRuleId || rule._id === triggerRuleId || rule.id === triggerRuleId)) ||
+            (triggerRuleName && rule.name && rule.name.trim().toLowerCase() === triggerRuleName.trim().toLowerCase());
+
+          if (isMatch) {
+            setFlashingRuleId(ruleId);
+            setTimeout(() => setFlashingRuleId(null), 2500);
+
+            return {
+              ...rule,
+              lastTriggered: data.timestamp || new Date().toISOString(),
+              lastTriggeredSensor: data.sensorId || rule.lastTriggeredSensor || "TURBINE-001",
+              lastTriggeredValue: data.value !== undefined ? data.value : rule.lastTriggeredValue,
+              lastTriggeredField: data.field || "temperature",
+            };
+          }
+          return rule;
+        })
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const handleToggleStatus = async (rule, e) => {
     e.stopPropagation();
@@ -194,10 +233,21 @@ export default function SavedRulesPanel({
                   })
                 : "Recently";
 
+              const isFlashing = flashingRuleId === ruleId;
+              const formatValueWithUnit = (val, fld) => {
+                if (val === undefined || val === null) return "";
+                const lower = (fld || "").toLowerCase();
+                if (lower.includes("temp")) return ` (${val}°C)`;
+                if (lower.includes("press")) return ` (${val} PSI)`;
+                if (lower.includes("humid")) return ` (${val}%)`;
+                if (lower.includes("rpm")) return ` (${val} RPM)`;
+                return ` (${val})`;
+              };
+
               return (
                 <div
                   key={ruleId}
-                  className={`saved-rule-card ${isSelectedOnCanvas ? "is-active" : ""}`}
+                  className={`saved-rule-card ${isSelectedOnCanvas ? "is-active" : ""} ${isFlashing ? "trigger-pulse-glow" : ""}`}
                   onClick={() => onLoadRule(rule)}
                 >
                   <div className="rule-card-header">
@@ -205,6 +255,7 @@ export default function SavedRulesPanel({
                       {rule.name || "Untitled Rule"}
                     </span>
                     {isSelectedOnCanvas && <span className="active-pill">Editing</span>}
+                    {isFlashing && <span className="realtime-pill" style={{ marginLeft: "auto" }}>⚡ Triggered</span>}
                   </div>
 
                   {/* Step 1 & 2: Rule Runtime Status and Enable / Disable Control */}
@@ -234,7 +285,7 @@ export default function SavedRulesPanel({
                     </p>
                   )}
 
-                  {/* Step 8: Last Trigger Information */}
+                  {/* Step 4: Last Trigger Information */}
                   <div className="rule-card-trigger-info">
                     <span className="trigger-time-badge">
                       ⏱️ Last Triggered:{" "}
@@ -256,6 +307,7 @@ export default function SavedRulesPanel({
                             (n) => (n.type || "").toLowerCase().includes("sensor")
                           )?.data?.sensorId ||
                           "TURBINE-001"}
+                        {formatValueWithUnit(rule.lastTriggeredValue, rule.lastTriggeredField || "temperature")}
                       </strong>
                     </span>
                   </div>
