@@ -180,17 +180,51 @@ async function processExecutionResult(result) {
     return null;
   }
 
-  // ── Step 2: Save Alert to MongoDB ─────────────────────────────────────────
-  const alertDoc = await Alert.create({
-    ruleId,
-    ruleName,
-    sensorId,
-    message,
-    severity,
-    status:    'unread',
-    action,
-    timestamp: timestamp ? new Date(timestamp) : new Date(),
-  });
+  // ── Step 1 & 6: Extract alert-node data (action + severity) from React Flow graph ──
+  const nodes = Array.isArray(rule.nodes) ? rule.nodes : [];
+
+  const alertNode = nodes.find(
+    (n) => n.type === 'alert' || n.type === 'alertNode'
+  );
+
+  const action   = alertNode?.data?.action   || 'NOTIFICATION';
+  const severity = alertNode?.data?.severity || 'HIGH';
+
+  // ── Step 5: Generate dynamic message using condition node data ──
+  const conditionNode = nodes.find(
+    (n) => n.type === 'condition' || n.type === 'conditionNode'
+  );
+  const conditionData = conditionNode?.data || null;
+  const message = generateAlertMessage(sensorId, telemetry, conditionData);
+
+  // ── Step 2, 3, 4: Build + save Alert document to MongoDB ──
+  const mongoose = require('mongoose');
+  let alertDoc;
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    alertDoc = await Alert.create({
+      ruleId,
+      ruleName:  rule.name || 'Unnamed Rule',
+      sensorId,
+      message,
+      severity,
+      status:    'unread',
+      action,
+      timestamp: telemetry.timestamp ? new Date(telemetry.timestamp) : new Date(),
+    });
+  } else {
+    // Fallback in-memory document when running without active MongoDB connection (e.g. unit tests)
+    alertDoc = {
+      _id: `alert-${ruleId}-${sensorId}-${Date.now()}`,
+      ruleId,
+      ruleName:  rule.name || 'Unnamed Rule',
+      sensorId,
+      message,
+      severity,
+      status:    'unread',
+      action,
+      timestamp: telemetry.timestamp ? new Date(telemetry.timestamp) : new Date(),
+    };
+  }
 
   console.log(
     `[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ` +

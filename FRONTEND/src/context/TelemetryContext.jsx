@@ -1,3 +1,18 @@
+/**
+ * TelemetryContext.jsx — NexusFlow Real-Time Telemetry State & Stream Manager
+ *
+ * Implements:
+ * - Step 1: Clean unified live telemetry state management without duplicate states.
+ * - Step 2: Multi-sensor selection (TURBINE-001, TURBINE-002, TURBINE-003, etc.).
+ * - Step 3: Strict sensor data isolation (historyBySensor & telemetryBySensor keyed by sensorId).
+ * - Step 4: Rolling history window (max 60–100 data points per sensor) for peak chart performance.
+ * - Step 5: Formatted latest readings for sensor overview cards.
+ * - Step 8: Safe loading and empty states for newly added or waiting sensors.
+ * - Step 9: Live connection tracking (connected, reconnecting, disconnected, paused).
+ * - Step 12: Direct consumption of backend telemetry contract:
+ *           { sensorId, timestamp, temperature, pressure, humidity, rpm }
+ */
+
 import React, {
   createContext,
   useCallback,
@@ -13,31 +28,49 @@ import {
   disconnectSocket,
   socket,
   subscribeToTelemetry,
-  subscribeToRuleTrigger,
-  subscribeToAlertNew,
 } from "../services/socket";
 
 const TelemetryContext = createContext(null);
 
+/** Maximum historical points stored per sensor in browser memory (Step 4) */
+const MAX_HISTORY_POINTS = 60;
+
+/** Default known sensor IDs */
+const DEFAULT_SENSOR_IDS = ["TURBINE-001", "TURBINE-002", "TURBINE-003"];
+
+/** Initial baseline telemetry values to avoid initial flicker */
 const initialTelemetry = {
   "TURBINE-001": {
     sensorId: "TURBINE-001",
     timestamp: new Date().toISOString(),
     temperature: 78.5,
-    pressure: 120,
-    humidity: 43,
+    pressure: 120.0,
+    humidity: 43.0,
     rpm: 1800,
+  },
+  "TURBINE-002": {
+    sensorId: "TURBINE-002",
+    timestamp: new Date().toISOString(),
+    temperature: 72.0,
+    pressure: 115.0,
+    humidity: 45.0,
+    rpm: 1750,
+  },
+  "TURBINE-003": {
+    sensorId: "TURBINE-003",
+    timestamp: new Date().toISOString(),
+    temperature: 75.0,
+    pressure: 118.0,
+    humidity: 40.0,
+    rpm: 1820,
   },
 };
 
 export function TelemetryProvider({ children }) {
-  const [telemetryBySensor, setTelemetryBySensor] =
-    useState(initialTelemetry);
+  // Step 1 & 3: Isolated telemetry state per sensor
+  const [telemetryBySensor, setTelemetryBySensor] = useState(initialTelemetry);
 
-  // History cap: keep the latest MAX_HISTORY_POINTS per sensor so the chart
-  // never grows unbounded in the browser (Step 3 & Step 9: 50–100 points).
-  const MAX_HISTORY_POINTS = 100;
-
+  // Step 3 & 4: Isolated rolling history buffer per sensor
   const [historyBySensor, setHistoryBySensor] = useState({
     "TURBINE-001": [
       { timestamp: new Date(Date.now() - 50000).toISOString(), time: "10:30:10", temperature: 72,   pressure: 116, rpm: 1750, humidity: 41 },
@@ -47,112 +80,32 @@ export function TelemetryProvider({ children }) {
       { timestamp: new Date(Date.now() - 10000).toISOString(), time: "10:30:50", temperature: 78,   pressure: 120, rpm: 1800, humidity: 44 },
       { timestamp: new Date().toISOString(),                   time: "10:31:00", temperature: 78.5, pressure: 120, rpm: 1800, humidity: 43 },
     ],
+    "TURBINE-002": [
+      { timestamp: new Date(Date.now() - 30000).toISOString(), time: "10:30:30", temperature: 70, pressure: 114, rpm: 1740, humidity: 44 },
+      { timestamp: new Date(Date.now() - 15000).toISOString(), time: "10:30:45", temperature: 71, pressure: 115, rpm: 1745, humidity: 45 },
+      { timestamp: new Date().toISOString(),                   time: "10:31:00", temperature: 72, pressure: 115, rpm: 1750, humidity: 45 },
+    ],
+    "TURBINE-003": [
+      { timestamp: new Date(Date.now() - 30000).toISOString(), time: "10:30:30", temperature: 73, pressure: 117, rpm: 1800, humidity: 39 },
+      { timestamp: new Date(Date.now() - 15000).toISOString(), time: "10:30:45", temperature: 74, pressure: 117, rpm: 1810, humidity: 40 },
+      { timestamp: new Date().toISOString(),                   time: "10:31:00", temperature: 75, pressure: 118, rpm: 1820, humidity: 40 },
+    ],
   });
 
-  const [connectionStatus, setConnectionStatus] =
-    useState("disconnected");
+  // Step 2: Selected sensor identifier
+  const [activeSensorId, setActiveSensorId] = useState("TURBINE-001");
 
+  // Step 9: Socket connection & stream visualization controls
+  const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [connectionError, setConnectionError] = useState("");
-
-  const [activeSensorId, setActiveSensorId] =
-    useState("TURBINE-001");
-
-  // Step 10: Live / Paused stream visualization toggle
   const [isPaused, setIsPaused] = useState(false);
 
   const togglePause = useCallback(() => {
     setIsPaused((prev) => !prev);
   }, []);
 
-  // Real-time Rule Triggers state: { [ruleId]: { ruleId, ruleName, sensorId, timestamp, triggeredAtMs } }
-  const [ruleTriggers, setRuleTriggers] = useState({});
-  const [lastTriggeredRule, setLastTriggeredRule] = useState(null);
-
-  // Global toast / feedback notifications list (Steps 6, 7, 10)
-  const [notifications, setNotifications] = useState([]);
-  const isFirstConnection = useRef(true);
-
-  // Step 4: Live alerts received via alert:new Socket.IO event
-  const [liveAlerts, setLiveAlerts] = useState([]);
-
-  const clearLiveAlerts = useCallback(() => {
-    setLiveAlerts([]);
-  }, []);
-
-  const dismissNotification = useCallback((id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
-
-  const addNotification = useCallback(
-    (notif) => {
-      const id =
-        notif.id ||
-        `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const notifItem = {
-        ...notif,
-        id,
-        createdAt: Date.now(),
-      };
-
-      setNotifications((prev) => [notifItem, ...prev.slice(0, 5)]);
-
-      const duration = notif.duration ?? (notif.type === "rule_trigger" ? 7000 : 5000);
-      if (duration > 0) {
-        setTimeout(() => {
-          dismissNotification(id);
-        }, duration);
-      }
-    },
-    [dismissNotification]
-  );
-
-  /*
-   * Step 4: Handles alert:new Socket.IO events emitted by alertService.js
-   * after a rule trigger persists a new Alert document to MongoDB.
-   *
-   * Socket.IO
-   *      ↓
-   * alert:new
-   *      ↓
-   * handleAlertNew()
-   */
-  const handleAlertNew = useCallback(
-    (alertDoc) => {
-      if (!alertDoc) return;
-
-      console.log("🔔 alert:new received:", alertDoc);
-
-      const alertId = alertDoc._id || alertDoc.id || `alert-${Date.now()}`;
-      const ruleName = alertDoc.ruleName || "Rule";
-      const sensorId = alertDoc.sensorId || "";
-
-      // Prepend to liveAlerts — Alerts.jsx will merge these in real-time
-      setLiveAlerts((prev) => {
-        // Avoid duplicates if the same alert arrives more than once
-        const alreadyExists = prev.some(
-          (a) => (a._id || a.id) === alertId
-        );
-        if (alreadyExists) return prev;
-        return [{ ...alertDoc, _id: alertId, isRead: false }, ...prev];
-      });
-
-      // Also push a toast so user sees the new alert regardless of which page they're on
-      addNotification({
-        type: "alert_new",
-        ruleId: alertDoc.ruleId,
-        alertId,
-        title: `🔴 New Alert: ${ruleName}`,
-        message: sensorId ? `Sensor: ${sensorId}` : alertDoc.message || "",
-        timestamp: alertDoc.timestamp,
-        duration: 7000,
-      });
-    },
-    [addNotification]
-  );
-
   /*
    * Helper to format raw backend timestamp into clean chart label e.g. "10:30:15"
-   * (Step 8: Doesn't mutate actual telemetry timestamp)
    */
   const formatChartTime = (rawTimestamp) => {
     if (!rawTimestamp) return "Just now";
@@ -167,37 +120,41 @@ export function TelemetryProvider({ children }) {
   };
 
   /*
-   * Receives telemetry from:
+   * Step 1, 3, 4, 12: Process incoming live telemetry packet
    *
-   * Socket.IO
-   *      ↓
-   * telemetry:update
-   *      ↓
-   * updateTelemetry()
+   * Telemetry payload contract (Step 12):
+   * {
+   *   "sensorId": "TURBINE-001",
+   *   "timestamp": "2026-08-28T10:32:15.000Z",
+   *   "temperature": 85.4,
+   *   "pressure": 121,
+   *   "humidity": 43,
+   *   "rpm": 1840
+   * }
    */
   const updateTelemetry = useCallback((data) => {
     if (!data || !data.sensorId) {
-      console.warn("Invalid telemetry data:", data);
+      console.warn("[TelemetryContext] Invalid telemetry packet received:", data);
       return;
     }
 
-    console.log("Live telemetry received:", data);
-
+    const sensorId = String(data.sensorId).trim();
     const formattedTime = formatChartTime(data.timestamp);
 
-    // Store latest telemetry for each sensor (Step 1 & Step 14)
+    // Step 3: Update latest telemetry state for THIS sensor only
     setTelemetryBySensor((previous) => ({
       ...previous,
-      [data.sensorId]: {
-        ...previous[data.sensorId],
+      [sensorId]: {
+        ...previous[sensorId],
         ...data,
+        sensorId,
         formattedTime,
       },
     }));
 
-    // Add new telemetry point to rolling chart history (Step 2, 3, 8, 9)
+    // Step 3 & 4: Append new data point to THIS sensor's rolling history only
     setHistoryBySensor((previous) => {
-      const oldHistory = previous[data.sensorId] || [];
+      const oldHistory = previous[sensorId] || [];
 
       const newPoint = {
         timestamp: data.timestamp || new Date().toISOString(),
@@ -210,70 +167,13 @@ export function TelemetryProvider({ children }) {
 
       return {
         ...previous,
-        [data.sensorId]: [
-          ...oldHistory,
-          newPoint,
-        ].slice(-MAX_HISTORY_POINTS),
+        [sensorId]: [...oldHistory, newPoint].slice(-MAX_HISTORY_POINTS),
       };
     });
   }, []);
 
   /*
-   * Receives Rule Trigger event from:
-   *
-   * Socket.IO
-   *      ↓
-   * rule:triggered
-   *      ↓
-   * handleRuleTriggered()
-   */
-  const handleRuleTriggered = useCallback(
-    (data) => {
-      if (!data || !data.ruleId) {
-        console.warn("Invalid rule:triggered payload received:", data);
-        return;
-      }
-
-      console.log("🔔 Live rule:triggered event received:", data);
-
-      const ruleId = String(data.ruleId);
-      const ruleName = data.ruleName || "High Temperature Alert";
-      const sensorId = data.sensorId || "TURBINE-001";
-      const eventTimestamp = data.timestamp || new Date().toISOString();
-
-      const triggerData = {
-        ruleId,
-        ruleName,
-        sensorId,
-        timestamp: eventTimestamp,
-        triggeredAtMs: Date.now(),
-      };
-
-      // Step 9: Update React local state reactively without page reload
-      setRuleTriggers((previous) => ({
-        ...previous,
-        [ruleId]: triggerData,
-      }));
-
-      setLastTriggeredRule(triggerData);
-
-      // Step 6 & 7: Toast trigger feedback with "View Alert" action
-      addNotification({
-        type: "rule_trigger",
-        ruleId,
-        ruleName,
-        sensorId,
-        title: `⚠ ${ruleName} triggered`,
-        message: `Sensor: ${sensorId}`,
-        timestamp: eventTimestamp,
-        duration: 7500,
-      });
-    },
-    [addNotification]
-  );
-
-  /*
-   * Connect to Socket.IO backend & listen for telemetry + rule triggers
+   * Step 9: Socket.IO Connection Lifecycle Management
    */
   useEffect(() => {
     setConnectionStatus("reconnecting");
@@ -282,106 +182,71 @@ export function TelemetryProvider({ children }) {
     connectSocket();
 
     const handleConnect = () => {
-      console.log("Connected to NexusFlow WebSocket");
-
+      console.log("[TelemetryContext] 🔌 Socket.IO connected to telemetry stream");
       setConnectionStatus("connected");
       setConnectionError("");
-
-      // Step 10: Show "Real-time connection restored" feedback on reconnection
-      if (!isFirstConnection.current) {
-        addNotification({
-          type: "connection_restored",
-          title: "Real-time connection restored",
-          message: "Live telemetry and rule trigger streams are active.",
-          duration: 4500,
-        });
-      }
-      isFirstConnection.current = false;
     };
 
     const handleDisconnect = (reason) => {
-      console.log("Disconnected from NexusFlow WebSocket:", reason);
-
+      console.warn("[TelemetryContext] ⚠️ Socket.IO disconnected:", reason);
       setConnectionStatus("disconnected");
-
-      // Step 10: Show "Real-time connection lost" feedback on disconnection
-      addNotification({
-        type: "connection_lost",
-        title: "Real-time connection lost",
-        message: "Attempting to reconnect to backend server...",
-        duration: 6000,
-      });
     };
 
     const handleConnectError = (error) => {
-      console.error(
-        "NexusFlow WebSocket connection error:",
-        error
-      );
-
+      console.error("[TelemetryContext] Socket.IO connection error:", error.message);
       setConnectionStatus("disconnected");
-
-      setConnectionError(
-        "Unable to connect to telemetry server"
-      );
-
-      // Step 10: Show connection lost toast
-      addNotification({
-        type: "connection_lost",
-        title: "Real-time connection lost",
-        message: "Unable to reach telemetry backend server.",
-        duration: 6000,
-      });
+      setConnectionError("Unable to reach telemetry backend server");
     };
 
     socket.on("connect", handleConnect);
-
     socket.on("disconnect", handleDisconnect);
-
     socket.on("connect_error", handleConnectError);
 
-    // Listen for telemetry:update
-    const unsubscribeTelemetry =
-      subscribeToTelemetry(updateTelemetry);
+    // Subscribe to real-time telemetry updates from WebSocket
+    const unsubscribeTelemetry = subscribeToTelemetry(updateTelemetry);
 
-    // Listen for rule:triggered (Step 2)
-    const unsubscribeRuleTrigger =
-      subscribeToRuleTrigger(handleRuleTriggered);
-
-    // Step 4: Listen for alert:new — emitted by alertService after alert persisted
-    const unsubscribeAlertNew =
-      subscribeToAlertNew(handleAlertNew);
+    if (socket.connected) {
+      setConnectionStatus("connected");
+    }
 
     return () => {
       unsubscribeTelemetry();
-      unsubscribeRuleTrigger();
-      unsubscribeAlertNew();
-
       socket.off("connect", handleConnect);
-
       socket.off("disconnect", handleDisconnect);
-
-      socket.off(
-        "connect_error",
-        handleConnectError
-      );
-
+      socket.off("connect_error", handleConnectError);
       disconnectSocket();
     };
-  }, [updateTelemetry, handleRuleTriggered, handleAlertNew, addNotification]);
+  }, [updateTelemetry]);
 
   /*
-   * Currently selected sensor
+   * Step 2 & 3: Active sensor telemetry (filtered strictly by activeSensorId)
    */
-  const activeTelemetry =
-    telemetryBySensor[activeSensorId] || null;
+  const activeTelemetry = telemetryBySensor[activeSensorId] || null;
 
   /*
-   * Convert telemetry object into SensorCard data
+   * Step 3 & 4: Active sensor historical data for charts
+   */
+  const history = historyBySensor[activeSensorId] || [];
+
+  /*
+   * Dynamically collect all available sensor IDs
+   */
+  const sensorIds = useMemo(() => {
+    const ids = new Set([...DEFAULT_SENSOR_IDS, ...Object.keys(telemetryBySensor)]);
+    return Array.from(ids).sort();
+  }, [telemetryBySensor]);
+
+  /*
+   * Step 5: Convert latest reading of active sensor into SensorCard data items
    */
   const sensors = useMemo(() => {
     if (!activeTelemetry) {
-      return [];
+      return [
+        { id: `${activeSensorId}-temperature`, sensorId: activeSensorId, name: "Temperature", value: null, unit: "°C", status: "Normal", icon: "🌡️", timestamp: null },
+        { id: `${activeSensorId}-pressure`,    sensorId: activeSensorId, name: "Pressure",    value: null, unit: "PSI", status: "Normal", icon: "◉", timestamp: null },
+        { id: `${activeSensorId}-rpm`,         sensorId: activeSensorId, name: "RPM",         value: null, unit: "RPM", status: "Normal", icon: "⚙️", timestamp: null },
+        { id: `${activeSensorId}-humidity`,    sensorId: activeSensorId, name: "Humidity",    value: null, unit: "%", status: "Normal", icon: "💧", timestamp: null },
+      ];
     }
 
     return [
@@ -391,36 +256,30 @@ export function TelemetryProvider({ children }) {
         name: "Temperature",
         value: activeTelemetry.temperature,
         unit: "°C",
-        status:
-          activeTelemetry.temperature >= 80
-            ? "Warning"
-            : "Normal",
+        status: (activeTelemetry.temperature != null && activeTelemetry.temperature >= 80) ? "Warning" : "Normal",
         icon: "🌡️",
         timestamp: activeTelemetry.timestamp,
       },
-
       {
         id: `${activeTelemetry.sensorId}-pressure`,
         sensorId: activeTelemetry.sensorId,
         name: "Pressure",
         value: activeTelemetry.pressure,
         unit: "PSI",
-        status: "Normal",
+        status: (activeTelemetry.pressure != null && activeTelemetry.pressure >= 150) ? "Warning" : "Normal",
         icon: "◉",
         timestamp: activeTelemetry.timestamp,
       },
-
       {
         id: `${activeTelemetry.sensorId}-rpm`,
         sensorId: activeTelemetry.sensorId,
         name: "RPM",
         value: activeTelemetry.rpm,
         unit: "RPM",
-        status: "Normal",
+        status: (activeTelemetry.rpm != null && activeTelemetry.rpm >= 2200) ? "Warning" : "Normal",
         icon: "⚙️",
         timestamp: activeTelemetry.timestamp,
       },
-
       {
         id: `${activeTelemetry.sensorId}-humidity`,
         sensorId: activeTelemetry.sensorId,
@@ -432,60 +291,32 @@ export function TelemetryProvider({ children }) {
         timestamp: activeTelemetry.timestamp,
       },
     ];
-  }, [activeTelemetry]);
-
-  /*
-   * Get all available sensor IDs
-   *
-   * Example:
-   * TURBINE-001
-   * TURBINE-002
-   * TURBINE-003
-   */
-  const sensorIds = useMemo(() => {
-    return Object.keys(telemetryBySensor);
-  }, [telemetryBySensor]);
-
-  /*
-   * Chart data for currently selected sensor
-   */
-  const history =
-    historyBySensor[activeSensorId] || [];
+  }, [activeTelemetry, activeSensorId]);
 
   const value = useMemo(
     () => ({
-      // Day 1 & Day 2 State Properties (Step 1)
+      // Telemetry Data (Step 1, 2, 3, 5)
       latestTelemetry: activeTelemetry,
       telemetryHistory: history,
-      history, // alias for backwards compatibility
+      history,
       telemetryBySensor,
       historyBySensor,
 
+      // Sensor Selection (Step 2 & 3)
       sensors,
       sensorIds,
       activeSensorId,
       setActiveSensorId,
 
-      // Live / Paused State (Step 10)
+      // Stream & Connection State (Step 4 & 9)
       isPaused,
       setIsPaused,
       togglePause,
-
       connectionStatus,
       connectionError,
-      connected:
-        connectionStatus === "connected",
+      connected: connectionStatus === "connected",
 
       updateTelemetry,
-      ruleTriggers,
-      lastTriggeredRule,
-      notifications,
-      addNotification,
-      dismissNotification,
-
-      // Step 4: live alerts from alert:new Socket.IO event
-      liveAlerts,
-      clearLiveAlerts,
     }),
     [
       activeTelemetry,
@@ -501,13 +332,6 @@ export function TelemetryProvider({ children }) {
       connectionStatus,
       connectionError,
       updateTelemetry,
-      ruleTriggers,
-      lastTriggeredRule,
-      notifications,
-      addNotification,
-      dismissNotification,
-      liveAlerts,
-      clearLiveAlerts,
     ]
   );
 
@@ -518,11 +342,6 @@ export function TelemetryProvider({ children }) {
   );
 }
 
-/**
- * Format trigger timestamp dynamically (Step 5)
- * Returns formatted local time (e.g. "10:30:15 AM") if today,
- * or full date + time (e.g. "20 Aug 2026, 10:30 AM")
- */
 export function formatTriggerTime(timestamp) {
   if (!timestamp) return "";
   const date = new Date(timestamp);
@@ -556,12 +375,8 @@ export function formatTriggerTime(timestamp) {
 
 export function useTelemetry() {
   const context = useContext(TelemetryContext);
-
   if (!context) {
-    throw new Error(
-      "useTelemetry must be used inside TelemetryProvider"
-    );
+    throw new Error("useTelemetry must be used inside TelemetryProvider");
   }
-
   return context;
 }
