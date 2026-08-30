@@ -1,6 +1,12 @@
 const Rule = require('../models/Rule');
 const { validateGraph } = require('../compiler/graphValidator');
 const { startRule, stopRule, restartRule, compiledRules } = require('../compiler/rxjsRuleEngine');
+const {
+  loadRule,
+  startRule,
+  stopRule,
+  reloadRule,
+} = require('../engine/ruleRuntime');
 
 /**
  * Helper function to validate React Flow graph rule structure
@@ -77,7 +83,8 @@ const createRule = async (req, res) => {
     let compiled = false;
     let compilationMessage = 'Rule saved';
     if (rule.isActive) {
-      compiled = startRule(rule);
+      const loadResult = loadRule(rule.toObject ? rule.toObject() : rule);
+      compiled = loadResult.ok && startRule(loadResult.ruleId);
       compilationMessage = compiled
         ? 'Rule compiled and running successfully'
         : 'Rule saved, compilation pending';
@@ -212,7 +219,7 @@ const updateRule = async (req, res) => {
     let compiled = false;
     let compilationMessage = 'Rule saved';
     if (rule.isActive) {
-      compiled = restartRule(rule);
+      compiled = reloadRule(rule.toObject ? rule.toObject() : rule);
       compilationMessage = compiled
         ? 'Rule compiled and running successfully'
         : 'Rule saved, compilation failed';
@@ -308,7 +315,9 @@ const updateRuleStatus = async (req, res) => {
     await rule.save();
 
     if (rule.isActive) {
-      startRule(rule);
+      const ruleObj = rule.toObject ? rule.toObject() : rule;
+      const loadResult = loadRule(ruleObj);
+      if (loadResult.ok) startRule(loadResult.ruleId);
     } else {
       stopRule(rule._id ? String(rule._id) : rule.id);
     }
@@ -354,7 +363,9 @@ const toggleRuleStatus = async (req, res) => {
     await rule.save();
 
     if (rule.isActive) {
-      startRule(rule);
+      const ruleObj = rule.toObject ? rule.toObject() : rule;
+      const loadResult = loadRule(ruleObj);
+      if (loadResult.ok) startRule(loadResult.ruleId);
     } else {
       stopRule(rule._id ? String(rule._id) : rule.id);
     }
