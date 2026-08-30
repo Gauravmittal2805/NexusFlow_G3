@@ -412,8 +412,10 @@ const NODE_HANDLERS = {
   mathNode:      mathHandler,
   alert:         alertHandler,
   alertNode:     alertHandler,
-  action:        alertHandler,
-  actionNode:    alertHandler,
+  action:        alertHandler,   // alias
+  actionNode:    alertHandler,   // alias
+  email:         alertHandler,   // alias — React Flow builder uses this type
+  emailNode:     alertHandler,   // alias
   filter:        filterHandler,
 };
 

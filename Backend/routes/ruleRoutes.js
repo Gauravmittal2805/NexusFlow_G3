@@ -5,6 +5,7 @@ const {
   getRules,
   getRuleById,
   getRuleStatus,
+  getRuntimePipelineStatus,
   updateRule,
   deleteRule,
   updateRuleStatus,
@@ -21,6 +22,10 @@ router.post('/', requireRole('admin', 'operator'), createRule);
 
 // GET /api/rules - Get all rules (admin, operator, viewer)
 router.get('/', requireRole('admin', 'operator', 'viewer'), getRules);
+
+// GET /api/rules/runtime/status - Get all active pipelines in memory
+// MUST be before /:id routes so Express doesn't treat "runtime" as an id
+router.get('/runtime/status', requireRole('admin', 'operator', 'viewer'), getRuntimePipelineStatus);
 
 // GET /api/rules/:id/status - Get single rule status by ID (admin, operator, viewer)
 router.get('/:id/status', requireRole('admin', 'operator', 'viewer'), getRuleStatus);

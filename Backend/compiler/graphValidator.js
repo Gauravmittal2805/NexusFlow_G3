@@ -4,13 +4,15 @@ const VALID_NODE_TYPES = new Set([
   'sensorNode',
   'condition',
   'conditionNode',
-  'math',       // transform node — applies arithmetic to a telemetry field via RxJS map()
+  'math',
   'mathNode',
   'alert',
   'alertNode',
-  'action',
+  'action',     // alias for alert
   'actionNode',
-  'filter',     // stream-windowing / data-filtering (stub; no backend handler yet)
+  'email',      // alias for alert (used by React Flow builder)
+  'emailNode',
+  'filter',
 ]);
 
 /**
@@ -21,7 +23,9 @@ const NODE_CATEGORY = {
   sensor:    (type) => type === 'sensor'    || type === 'sensorNode',
   condition: (type) => type === 'condition' || type === 'conditionNode',
   math:      (type) => type === 'math'      || type === 'mathNode',
-  alert:     (type) => type === 'alert'     || type === 'alertNode' || type === 'action' || type === 'actionNode',
+  alert:     (type) => type === 'alert'  || type === 'alertNode'
+                    || type === 'action' || type === 'actionNode'
+                    || type === 'email'  || type === 'emailNode',
 };
 
 /**
