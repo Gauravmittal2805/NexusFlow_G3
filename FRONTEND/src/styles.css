@@ -5366,7 +5366,8 @@ button {
   text-transform: capitalize;
 }
 
-.status-pill.active {
+.status-pill.active,
+.status-pill.running {
   background: #dcfce7;
   color: #15803d;
   border: 1px solid #bbf7d0;
@@ -5376,6 +5377,25 @@ button {
   background: #f1f5f9;
   color: #64748b;
   border: 1px solid #e2e8f0;
+}
+
+.status-pill.compilation-failed {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.status-pill.triggered {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #f59e0b;
+  animation: pulseDot 1.2s infinite;
+}
+
+.status-pill.draft {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
 }
 
 .status-dot-symbol {
@@ -5826,5 +5846,282 @@ button {
 .trigger-sensor-badge strong {
   color: #3b82f6;
 }
+
+/* ==========================================================================
+   Execution Status Badges & Compilation Error Handling (Steps 1 to 6)
+   ========================================================================== */
+
+.status-badge-compilation-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.status-badge-triggered {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  padding: 2px 8px;
+  border-radius: 12px;
+  animation: pulseDot 1.2s infinite;
+}
+
+.compilation-error-card {
+  background: #fff5f5;
+  border: 1.5px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.compilation-error-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 4px;
+}
+
+.compilation-error-message {
+  font-size: 11px;
+  color: #7f1d1d;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.execution-last-trigger-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-label-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.realtime-pill {
+  font-size: 9px;
+  font-weight: 800;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.last-trigger-info-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+
+.last-trigger-info-card.trigger-pulse-glow {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  transform: scale(1.01);
+}
+
+.trigger-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.trigger-info-row .trigger-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.trigger-info-row .trigger-val.rule-title {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.trigger-info-row .trigger-val.sensor-code {
+  color: #2563eb;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.trigger-info-row .trigger-val.metric-code {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.trigger-info-row .trigger-val.time-code {
+  color: #475569;
+  font-family: monospace;
+}
+
+.rule-last-triggered-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.last-triggered-header {
+  margin-bottom: 6px;
+}
+
+.last-triggered-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.value-highlight {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   ExecutionHistory Widget & Loading States (Steps 7 & 10)
+   ========================================================================== */
+
+.execution-history-widget {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.execution-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.execution-history-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.execution-history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.execution-history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  transition: background 0.15s ease;
+}
+
+.execution-history-item.item-passed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.execution-history-item.item-failed {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.execution-status-icon {
+  font-size: 11px;
+  font-weight: 800;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.execution-status-icon.icon-passed {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.execution-status-icon.icon-failed {
+  color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.execution-timestamp {
+  font-family: monospace;
+  font-size: 11px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.execution-metric-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.execution-history-item.item-passed .execution-metric-text {
+  color: #15803d;
+}
+
+.execution-history-item.item-failed .execution-metric-text {
+  color: #64748b;
+}
+
+.loading-rule-pill-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.loading-spinner-symbol {
+  font-size: 11px;
+  animation: spinSlow 2s linear infinite;
+}
+
+
 
 

@@ -39,6 +39,11 @@ export const toggleRuleStatus = (id) => {
   return api.patch(`/api/rules/${id}/toggle`);
 };
 
+// Step 1: Fetch runtime status of a rule (GET /api/rules/:id/status)
+export const getRuleStatus = (id) => {
+  return api.get(`/api/rules/${id}/status`);
+};
+
 // Step 9: Refresh a rule's current state from backend
 export const refreshRule = (id) => {
   return api.get(`/api/rules/${id}`);
@@ -48,6 +53,7 @@ export default {
   createRule,
   getRules,
   getRuleById,
+  getRuleStatus,
   refreshRule,
   updateRule,
   updateRuleStatus,

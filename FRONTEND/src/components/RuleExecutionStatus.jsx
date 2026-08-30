@@ -1,29 +1,49 @@
 import React, { useState, useEffect } from "react";
-import { subscribeToRuleTrigger } from "../services/socket";
+import { subscribeToRuleTrigger, connectSocket } from "../services/socket";
+import ExecutionHistory from "./ExecutionHistory";
 
 /**
- * RuleExecutionStatus Component (Steps 7, 8, 13)
+ * Clean and sanitize compilation/validation errors to avoid exposing
+ * raw JavaScript errors (e.g. TypeError, stack traces) to the user.
+ */
+function formatCompilationError(errorObjOrString) {
+  if (!errorObjOrString) return "Rule could not be executed.";
+
+  let raw = typeof errorObjOrString === "string"
+    ? errorObjOrString
+    : errorObjOrString.message || errorObjOrString.error || JSON.stringify(errorObjOrString);
+
+  // Strip generic prefixes
+  raw = raw.replace(/^Error:\s*/i, "");
+  raw = raw.replace(/^TypeError:\s*/i, "");
+  raw = raw.replace(/^ValidationError:\s*/i, "");
+  raw = raw.replace(/^CompilationError:\s*/i, "");
+
+  if (raw.toLowerCase().includes("cannot read properties of undefined") ||
+      raw.toLowerCase().includes("cannot read property") ||
+      raw.toLowerCase().includes("value is missing") ||
+      raw.toLowerCase().includes("missing value")) {
+    return "Condition node is missing a value.";
+  }
+
+  if (raw.toLowerCase().includes("missing a valid 'id'") || raw.toLowerCase().includes("missing a valid 'type'")) {
+    return "One or more nodes in the graph are incomplete.";
+  }
+
+  return raw;
+}
+
+/**
+ * RuleExecutionStatus Component (Steps 1 to 6)
  *
  * Displays in-place rule execution monitoring & live trigger feedback
  * inside the Rule Builder.
- *
- * Receives `rule:triggered` events from Backend RxJS Rule Engine via Socket.IO:
- * {
- *   ruleId: "...",
- *   ruleName: "High Temperature Alert",
- *   sensorId: "TURBINE-001",
- *   field: "temperature",
- *   value: 85,
- *   timestamp: "..."
- * }
- *
- * Note: Member 4 handles global dashboard toasts — this component focuses on
- * rule-level execution monitoring inside Rule Builder / Details.
  */
 export default function RuleExecutionStatus({
   ruleId,
-  ruleName,
+  ruleName = "High Temperature Alert",
   isRuleActive = true,
+  ruleStatus = "RUNNING",
   compilationStatus,
   onTriggerUpdate,
 }) {
@@ -32,6 +52,9 @@ export default function RuleExecutionStatus({
   const [isFlashing, setIsFlashing] = useState(false);
 
   useEffect(() => {
+    // Ensure socket connection
+    connectSocket();
+
     // Subscribe to Rule Engine live triggers
     const unsubscribe = subscribeToRuleTrigger((data) => {
       if (!data) return;
@@ -39,18 +62,21 @@ export default function RuleExecutionStatus({
       const isMatchingRule =
         !ruleId ||
         data.ruleId === ruleId ||
-        (ruleName && data.ruleName && data.ruleName.trim() === ruleName.trim());
+        (ruleName && data.ruleName && data.ruleName.trim().toLowerCase() === ruleName.trim().toLowerCase());
 
       if (isMatchingRule) {
+        const dateObj = data.timestamp ? new Date(data.timestamp) : new Date();
+        const formattedTime = !isNaN(dateObj.getTime())
+          ? dateObj.toLocaleTimeString(undefined, {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })
+          : new Date().toLocaleTimeString();
+
         const enriched = {
           ...data,
-          formattedTime: data.timestamp
-            ? new Date(data.timestamp).toLocaleTimeString(undefined, {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              })
-            : new Date().toLocaleTimeString(),
+          formattedTime,
         };
 
         setLatestTrigger(enriched);
@@ -71,83 +97,122 @@ export default function RuleExecutionStatus({
   }, [ruleId, ruleName, onTriggerUpdate]);
 
   const formatFieldValue = (trigger) => {
-    if (!trigger) return "";
-    const field = trigger.field || "temperature";
+    if (!trigger) return "--";
+    const field = (trigger.field || "temperature").toLowerCase();
     const val = trigger.value !== undefined && trigger.value !== null ? trigger.value : "--";
-    const unit = field === "temperature" ? "°C" : field === "pressure" ? " PSI" : field === "humidity" ? "%" : field === "rpm" ? " RPM" : "";
-    const label = field.charAt(0).toUpperCase() + field.slice(1);
-    return `${label}: ${val}${unit}`;
+    if (field.includes("temp")) return `${val}°C`;
+    if (field.includes("press")) return `${val} PSI`;
+    if (field.includes("humid")) return `${val}%`;
+    if (field.includes("rpm")) return `${val} RPM`;
+    return `${val}`;
   };
+
+  const isCompilationError =
+    (compilationStatus && compilationStatus.status === "error") ||
+    ruleStatus === "COMPILATION_FAILED" ||
+    ruleStatus === "ERROR";
+
+  const resolvedStatus = isCompilationError
+    ? "COMPILATION_FAILED"
+    : isFlashing
+    ? "TRIGGERED"
+    : !isRuleActive || ruleStatus === "INACTIVE"
+    ? "INACTIVE"
+    : ruleStatus === "RUNNING"
+    ? "RUNNING"
+    : "ACTIVE";
 
   return (
     <div className="rule-execution-status-panel">
       <div className="execution-panel-header">
         <div className="panel-title-wrap">
           <span className="panel-icon">⚡</span>
-          <h4>Rule Runtime & Trigger Monitor</h4>
+          <h4>{ruleName || "High Temperature Alert"}</h4>
         </div>
         <div className="execution-runtime-badge">
-          {isRuleActive ? (
+          {resolvedStatus === "COMPILATION_FAILED" ? (
+            <span className="status-badge-compilation-failed">
+              ⚠ Compilation Failed
+            </span>
+          ) : resolvedStatus === "TRIGGERED" ? (
+            <span className="status-badge-triggered">
+              ⚡ Triggered
+            </span>
+          ) : resolvedStatus === "RUNNING" ? (
             <span className="live-pulse-badge">
-              <span className="pulse-dot"></span> Pipeline Active
+              <span className="pulse-dot"></span> ● Running
+            </span>
+          ) : resolvedStatus === "ACTIVE" ? (
+            <span className="live-pulse-badge">
+              <span className="pulse-dot"></span> ● Active
             </span>
           ) : (
-            <span className="idle-badge">○ Pipeline Stopped</span>
+            <span className="idle-badge">○ Inactive</span>
           )}
         </div>
       </div>
 
-      {/* Compilation Feedback Display */}
-      {compilationStatus && (
+      {/* Step 3: Compilation Feedback & Sanitized Error Display */}
+      {isCompilationError ? (
+        <div className="compilation-error-card">
+          <div className="compilation-error-header">
+            <span className="error-icon">⚠</span>
+            <strong>Rule could not be executed</strong>
+          </div>
+          <p className="compilation-error-message">
+            {formatCompilationError(compilationStatus?.message || compilationStatus?.error || "Condition node is missing a value.")}
+          </p>
+        </div>
+      ) : compilationStatus ? (
         <div className={`compilation-pill-bar ${compilationStatus.status || "info"}`}>
           {compilationStatus.message}
         </div>
-      )}
+      ) : null}
 
-      {/* Live Trigger Feedback Card (Step 7) */}
-      {latestTrigger ? (
-        <div className={`live-trigger-card ${isFlashing ? "trigger-pulse-glow" : ""}`}>
-          <div className="trigger-card-top">
-            <span className="trigger-alert-badge">⚡ Rule Triggered</span>
-            <span className="trigger-time-stamp">{latestTrigger.formattedTime}</span>
-          </div>
+      {/* Step 4: Show Last Execution/Trigger */}
+      <div className="execution-last-trigger-block">
+        <div className="section-label-row">
+          <span className="section-label-text">Last Triggered</span>
+          {latestTrigger && isFlashing && (
+            <span className="realtime-pill">Live Update</span>
+          )}
+        </div>
 
-          <div className="trigger-details-body">
-            <h5 className="trigger-rule-name">
-              {latestTrigger.ruleName || ruleName || "Rule Alert"}
-            </h5>
-            <div className="trigger-meta-row">
-              <span className="trigger-sensor-tag">
-                🔌 Sensor: <strong>{latestTrigger.sensorId || "TURBINE-001"}</strong>
-              </span>
-              <span className="trigger-metric-value">
-                📊 {formatFieldValue(latestTrigger)}
-              </span>
+        {latestTrigger ? (
+          <div className={`last-trigger-info-card ${isFlashing ? "trigger-pulse-glow" : ""}`}>
+            <div className="trigger-info-row">
+              <span className="trigger-label">Rule:</span>
+              <span className="trigger-val rule-title">{latestTrigger.ruleName || ruleName}</span>
+            </div>
+            <div className="trigger-info-row">
+              <span className="trigger-label">Sensor:</span>
+              <span className="trigger-val sensor-code">{latestTrigger.sensorId || "TURBINE-001"}</span>
+            </div>
+            <div className="trigger-info-row">
+              <span className="trigger-label">Value:</span>
+              <span className="trigger-val metric-code">{formatFieldValue(latestTrigger)}</span>
+            </div>
+            <div className="trigger-info-row">
+              <span className="trigger-label">Time:</span>
+              <span className="trigger-val time-code">{latestTrigger.formattedTime}</span>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="no-triggers-yet-state">
-          <span className="waiting-pulse">⏳</span>
-          <p>Awaiting live telemetry threshold crossings...</p>
-        </div>
-      )}
-
-      {/* Trigger History (Step 8) */}
-      {triggerHistory.length > 1 && (
-        <div className="trigger-history-section">
-          <span className="history-section-title">Recent Triggers:</span>
-          <div className="history-list">
-            {triggerHistory.slice(1).map((item, idx) => (
-              <div key={idx} className="history-item-row">
-                <span className="history-time">{item.formattedTime}</span>
-                <span className="history-sensor">{item.sensorId}</span>
-                <span className="history-val">{formatFieldValue(item)}</span>
-              </div>
-            ))}
+        ) : (
+          <div className="no-triggers-yet-state">
+            <span className="waiting-pulse">⏳</span>
+            <p>Awaiting live telemetry threshold crossings...</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Step 7: Recent Executions History Component */}
+      <ExecutionHistory
+        ruleId={ruleId}
+        ruleName={ruleName}
+        sensorId={latestTrigger?.sensorId || "TURBINE-001"}
+        field={latestTrigger?.field || "temperature"}
+        threshold={80}
+      />
     </div>
   );
 }
