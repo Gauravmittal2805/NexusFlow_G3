@@ -1,11 +1,12 @@
 const Rule = require('../models/Rule');
 const { validateGraph } = require('../compiler/graphValidator');
-const { startRule, stopRule, restartRule, compiledRules } = require('../compiler/rxjsRuleEngine');
 const {
   loadRule,
   startRule,
   stopRule,
   reloadRule,
+  getStatus,
+  getRuleStatus: getRuntimeStatus,
 } = require('../engine/ruleRuntime');
 
 /**
@@ -390,62 +391,85 @@ const toggleRuleStatus = async (req, res) => {
   }
 };
 
-// @desc    Get rule runtime status (GET /api/rules/:id/status) - Step 1 & 2
+// @desc    Get all active rule pipelines currently running in memory
+//          GET /api/rules/runtime/status
+// @access  Private
+const getRuntimePipelineStatus = (req, res) => {
+  const pipelines = getStatus();
+
+  const summary = pipelines.map((entry) => ({
+    ruleId:         entry.ruleId,
+    ruleName:       entry.ruleName,
+    status:         entry.status,           // 'RUNNING' | 'STOPPED'
+    conditionState: entry.conditionState,   // 'NORMAL'  | 'TRIGGERED'
+    executionOrder: entry.executionOrder,   // ['s1', 'c1', 'a1']
+    triggerCount:   entry.triggerCount,
+    startedAt:      entry.startedAt,
+    stoppedAt:      entry.stoppedAt,
+    loadError:      entry.loadError,
+    subscriptionClosed: entry.subscriptionClosed,
+  }));
+
+  const running = summary.filter((e) => e.status === 'RUNNING').length;
+  const stopped = summary.filter((e) => e.status === 'STOPPED').length;
+
+  return res.status(200).json({
+    success:    true,
+    total:      summary.length,
+    running,
+    stopped,
+    pipelines:  summary,
+  });
+};
+
+// @desc    Get runtime pipeline status for a single rule
+//          GET /api/rules/:id/status
 // @access  Private
 const getRuleStatus = async (req, res) => {
   try {
-    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, createdBy: req.user.id };
-    const rule = await Rule.findOne(filter);
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
 
+    const rule = await Rule.findOne(filter);
     if (!rule) {
-      return res.status(404).json({
-        success: false,
-        message: 'Rule not found',
-      });
+      return res.status(404).json({ success: false, message: 'Rule not found' });
     }
 
-    const ruleIdStr = String(rule._id);
-    const isCompiledAndRunning = compiledRules.has(ruleIdStr);
+    const ruleId  = String(rule._id);
+    const runtime = getRuntimeStatus(ruleId);
 
+    // Determine status: check runtime registry first, fall back to DB isActive
     let status = 'INACTIVE';
-    if (rule.isActive) {
-      status = isCompiledAndRunning ? 'RUNNING' : 'ACTIVE';
-    } else {
-      status = 'INACTIVE';
+    if (runtime) {
+      status = runtime.status; // 'RUNNING' or 'STOPPED'
+    } else if (rule.isActive) {
+      status = 'ACTIVE'; // active in DB but not yet loaded into runtime
     }
 
     return res.status(200).json({
-      success: true,
-      ruleId: ruleIdStr,
+      success:  true,
+      ruleId,
       ruleName: rule.name,
       isActive: Boolean(rule.isActive),
-      isRunning: isCompiledAndRunning,
-      status, // 'RUNNING', 'ACTIVE', 'INACTIVE'
-      lastTriggered: rule.lastTriggered || null,
-      lastTriggeredSensor: rule.lastTriggeredSensor || null,
-      lastTriggeredValue: rule.lastTriggeredValue ?? null,
-      rule: {
-        _id: rule._id,
-        name: rule.name,
-        isActive: rule.isActive,
-        status,
-        lastTriggered: rule.lastTriggered,
-        lastTriggeredSensor: rule.lastTriggeredSensor,
-        lastTriggeredValue: rule.lastTriggeredValue,
-      },
+      status,
+      // Runtime pipeline details (null if rule not in registry)
+      pipeline: runtime ? {
+        executionOrder:     runtime.executionOrder,
+        conditionState:     runtime.conditionState,
+        triggerCount:       runtime.triggerCount,
+        startedAt:          runtime.startedAt,
+        stoppedAt:          runtime.stoppedAt,
+        loadError:          runtime.loadError,
+        subscriptionClosed: runtime.subscriptionClosed,
+      } : null,
     });
   } catch (error) {
     console.error('Error fetching rule status:', error);
     if (error.kind === 'ObjectId') {
-      return res.status(404).json({
-        success: false,
-        message: 'Rule not found',
-      });
+      return res.status(404).json({ success: false, message: 'Rule not found' });
     }
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching rule status',
-    });
+    return res.status(500).json({ success: false, message: 'Server error while fetching rule status' });
   }
 };
 
@@ -454,6 +478,7 @@ module.exports = {
   getRules,
   getRuleById,
   getRuleStatus,
+  getRuntimePipelineStatus,
   updateRule,
   deleteRule,
   updateRuleStatus,

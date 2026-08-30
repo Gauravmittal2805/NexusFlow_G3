@@ -337,11 +337,13 @@ function buildRxjsPipe(executionOrder, nodeMap, ruleId, ruleName) {
         );
         break;
 
-      // ── Alert: tap() — sink side-effect ─────────────────────────────────
+      // ── Alert / Action / Email: tap() — sink side-effect ────────────────
       case 'alert':
       case 'alertNode':
       case 'action':
       case 'actionNode':
+      case 'email':
+      case 'emailNode':
         operators.push(
           tap((packet) => {
             const result = handler(node, packet.telemetry, packet.context);
