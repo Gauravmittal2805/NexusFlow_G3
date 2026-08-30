@@ -1,55 +1,119 @@
-const Alert = require('../models/Alert');
-const { getIo } = require('../websocket/telemetrySocket');
-
-// ─── Cooldown State ───────────────────────────────────────────────────────────
-// Tracks last alert timestamp per (ruleId:sensorId) pair to prevent duplicates
-const cooldownMap = new Map();
-const COOLDOWN_MS = 60 * 1000; // 60-second cooldown per rule+sensor pair
-
 /**
- * Checks if a (ruleId, sensorId) pair is currently in cooldown.
- * @param {string} ruleId
- * @param {string} sensorId
- * @returns {boolean} true if still in cooldown (suppress alert), false if new alert allowed
- */
-function isInCooldown(ruleId, sensorId) {
-  const key = `${ruleId}:${sensorId}`;
-  const lastFired = cooldownMap.get(key);
-  if (!lastFired) return false;
-  return Date.now() - lastFired < COOLDOWN_MS;
-}
-
-/**
- * Record that an alert was just fired for this (ruleId, sensorId) pair.
- * @param {string} ruleId
- * @param {string} sensorId
- */
-function recordCooldown(ruleId, sensorId) {
-  const key = `${ruleId}:${sensorId}`;
-  cooldownMap.set(key, Date.now());
-}
-
-// ─── Dynamic Message Builder ─────────────────────────────────────────────────
-
-/**
- * Generates a human-readable alert message from telemetry + condition data.
- * Example: "Temperature of TURBINE-001 exceeded the configured threshold of 80°C."
+ * alertService.js
  *
- * @param {string} sensorId
- * @param {Object} telemetry   - full telemetry payload
- * @param {Object|null} conditionData  - { field, operator, value } from condition node
- * @returns {string}
+ * Alert persistence, deduplication, Socket.IO broadcast.
+ *
+ * Two entry points:
+ *
+ *   processExecutionResult(executionResult)
+ *     ↓  accepts a RuleExecutionResult from engine/executionResult.js
+ *     ↓  Step 2 — save to MongoDB, Step 5 — emit Socket.IO, Step 6 — cooldown
+ *
+ *   processRuleTrigger(rule, telemetry)           ← legacy / backward-compat
+ *     ↓  builds its own data from raw rule+telemetry
+ *     ↓  delegates to processExecutionResult internally
+ *
+ * Cooldown (Step 6):
+ *   Configurable via ALERT_COOLDOWN_MS env var (default 60 s).
+ *   Once a rule+sensor pair fires, all repeated TRUE evaluations are
+ *   silently suppressed until the cooldown window expires.
+ *   This prevents alert spam when telemetry arrives faster than the
+ *   condition recovery time.
+ *
+ *   NORMAL → TRIGGERED  →  alert created
+ *   TRIGGERED (cooldown) → suppressed
+ *   TRIGGERED → NORMAL  →  recovery logged, no alert, cooldown reset
+ *   Cooldown expires    →  next TRIGGERED creates a new alert
+ *
+ * Socket.IO unified event contract (Step 5):
+ *   event: "alert:new"
+ *   payload:
+ *   {
+ *     alertId,  ruleId,   ruleName, sensorId,
+ *     severity, action,   message,  value,
+ *     field,    operator, threshold,
+ *     timestamp
+ *   }
  */
+
+'use strict';
+
+const Alert = require('../models/Alert');
+
+// ── Cooldown configuration (Step 6) ──────────────────────────────────────────
+
+/**
+ * How long (ms) to suppress repeated alerts for the same rule+sensor pair.
+ * Configurable via ALERT_COOLDOWN_MS environment variable.
+ * Default: 60 000 ms (60 seconds).
+ */
+const COOLDOWN_MS = parseInt(process.env.ALERT_COOLDOWN_MS, 10) || 60_000;
+
+/**
+ * cooldownMap  Map<"ruleId:sensorId", timestamp>
+ * Stores the last time an alert fired for a given (rule, sensor) pair.
+ */
+const cooldownMap = new Map();
+
+/**
+ * conditionStateMap  Map<"ruleId:sensorId", 'TRIGGERED'|'NORMAL'>
+ * Tracks whether the condition was TRUE on the last evaluation (Step 7).
+ */
+const conditionStateMap = new Map();
+
+function _cooldownKey(ruleId, sensorId) {
+  return `${ruleId}:${sensorId}`;
+}
+
+function isInCooldown(ruleId, sensorId) {
+  const last = cooldownMap.get(_cooldownKey(ruleId, sensorId));
+  return last ? (Date.now() - last) < COOLDOWN_MS : false;
+}
+
+function recordCooldown(ruleId, sensorId) {
+  cooldownMap.set(_cooldownKey(ruleId, sensorId), Date.now());
+}
+
+function clearCooldown(ruleId, sensorId) {
+  cooldownMap.delete(_cooldownKey(ruleId, sensorId));
+}
+
+function getConditionState(ruleId, sensorId) {
+  return conditionStateMap.get(_cooldownKey(ruleId, sensorId)) || 'NORMAL';
+}
+
+function setConditionState(ruleId, sensorId, state) {
+  conditionStateMap.set(_cooldownKey(ruleId, sensorId), state);
+}
+
+// ── Socket.IO helper ──────────────────────────────────────────────────────────
+
+function _emitAlert(payload) {
+  try {
+    const { getIo } = require('../websocket/telemetrySocket');
+    getIo().emit('alert:new', payload);
+  } catch (_) {
+    // Socket.IO not initialised in test environments — ignore
+  }
+}
+
+function _emitRuleTriggered(payload) {
+  try {
+    const { getIo } = require('../websocket/telemetrySocket');
+    getIo().emit('rule:triggered', payload);
+  } catch (_) {
+    // ignore in tests
+  }
+}
+
+// ── Message builder (kept for legacy processRuleTrigger path) ─────────────────
+
 function generateAlertMessage(sensorId, telemetry, conditionData) {
   if (!conditionData || !conditionData.field) {
-    // Generic fallback
     return `Sensor ${sensorId} triggered an alert condition.`;
   }
-
   const { field, operator, value } = conditionData;
   const currentValue = telemetry[field];
-
-  // Map operators to readable text
   const operatorText = {
     '>':  'exceeded',
     '>=': 'met or exceeded',
@@ -58,35 +122,61 @@ function generateAlertMessage(sensorId, telemetry, conditionData) {
     '==': 'equalled',
     '!=': 'changed from',
   }[operator] || 'triggered threshold of';
-
-  // Capitalise field name for display
   const fieldDisplay = field.charAt(0).toUpperCase() + field.slice(1);
-
-  const currentPart =
-    currentValue !== undefined ? ` Current reading: ${currentValue}.` : '';
-
+  const currentPart  = currentValue !== undefined ? ` Current reading: ${currentValue}.` : '';
   return `${fieldDisplay} of ${sensorId} ${operatorText} the configured threshold of ${value}.${currentPart}`;
 }
 
-// ─── Core Alert Processing ────────────────────────────────────────────────────
+// ── Step 2 — processExecutionResult() ────────────────────────────────────────
 
 /**
- * Called whenever a rule evaluates TRUE for an incoming telemetry reading.
- * Handles duplicate prevention, alert creation, DB persistence, and Socket.IO broadcast.
+ * Primary entry point.  Accepts a canonical RuleExecutionResult and:
+ *   1. Checks cooldown            (Step 6)
+ *   2. Handles recovery events    (Step 7)
+ *   3. Saves alert to MongoDB     (Step 2)
+ *   4. Emits rich Socket.IO event (Step 5)
+ *   5. Records cooldown
  *
- * @param {Object} rule       - full Rule document (with .nodes, .edges, ._id, .name)
- * @param {Object} telemetry  - telemetry payload e.g. { sensorId, temperature, ... }
- * @returns {Object|null} the saved Alert document, or null if suppressed by cooldown
+ * @param {RuleExecutionResult} result - from engine/executionResult.buildExecutionResult()
+ * @returns {Promise<Object|null>} saved Alert doc, or null if suppressed
  */
-async function processRuleTrigger(rule, telemetry) {
-  const ruleId  = rule._id ? rule._id.toString() : rule.id || 'unknown';
-  const sensorId = telemetry.sensorId || 'unknown';
+async function processExecutionResult(result) {
+  const {
+    ruleId, ruleName, sensorId,
+    field, operator, threshold, value,
+    action, severity, message, timestamp,
+    conditionState,
+  } = result;
 
-  // ── Step 11: Duplicate / cooldown prevention ──
+  const prevState = getConditionState(ruleId, sensorId);
+
+  // ── Step 7: Recovery — condition flipped TRIGGERED → NORMAL ──────────────
+  if (conditionState === 'NORMAL') {
+    if (prevState === 'TRIGGERED') {
+      console.log(
+        `[AlertService] 🟢 RECOVERY  "${ruleName}" | Sensor: ${sensorId} | condition returned to NORMAL`
+      );
+      setConditionState(ruleId, sensorId, 'NORMAL');
+      clearCooldown(ruleId, sensorId);
+
+      // Emit a lightweight recovery event so frontend can update alert status
+      _emitRuleTriggered({
+        ruleId, ruleName, sensorId,
+        event:     'rule:recovered',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return null; // no alert for NORMAL state
+  }
+
+  // conditionState === 'TRIGGERED' from here
+
+  // ── Step 6: Cooldown — suppress repeated triggers ─────────────────────────
   if (isInCooldown(ruleId, sensorId)) {
     console.log(
-      `[AlertService] Cooldown active — suppressing duplicate alert for rule "${rule.name}" | sensor ${sensorId}`
+      `[AlertService] ⏳ COOLDOWN   "${ruleName}" | Sensor: ${sensorId} | suppressed (${COOLDOWN_MS / 1000}s)`
     );
+    setConditionState(ruleId, sensorId, 'TRIGGERED');
     return null;
   }
 
@@ -137,61 +227,128 @@ async function processRuleTrigger(rule, telemetry) {
   }
 
   console.log(
-    `[AlertService] ✅ Alert created | Rule: "${rule.name}" | Sensor: ${sensorId} | Severity: ${severity} | Action: ${action}`
+    `[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ` +
+    `${severity} | ${action} | ${field} ${operator} ${threshold} = ${value}`
   );
 
-  // ── Step 10: Broadcast via Socket.IO → "alert:new" ──
-  try {
-    const io = getIo();
-    io.emit('alert:new', alertDoc);
-    console.log(`[AlertService] 📡 Broadcasted alert:new for rule "${rule.name}"`);
-  } catch (socketErr) {
-    // Socket.IO might not be initialised in test environments — log & continue
-    console.warn('[AlertService] Socket.IO not available:', socketErr.message);
-  }
+  // ── Step 5: Emit unified Socket.IO payload ────────────────────────────────
+  const socketPayload = {
+    alertId:   alertDoc._id,
+    ruleId,
+    ruleName,
+    sensorId,
+    severity,
+    action,
+    message,
+    value,
+    field,
+    operator,
+    threshold,
+    timestamp: alertDoc.timestamp,
+  };
 
-  // Record cooldown so next identical alert is suppressed for COOLDOWN_MS
+  _emitAlert(socketPayload);
+
+  // Also emit rule:triggered with the same rich payload
+  _emitRuleTriggered({
+    ruleId, ruleName, sensorId,
+    severity, value, field, operator, threshold,
+    timestamp: alertDoc.timestamp,
+  });
+
+  // ── Record state + cooldown ───────────────────────────────────────────────
+  setConditionState(ruleId, sensorId, 'TRIGGERED');
   recordCooldown(ruleId, sensorId);
 
   return alertDoc;
 }
 
-// ─── Query Helpers (used by Controller) ──────────────────────────────────────
+// ── Legacy entry point (backward-compat) ──────────────────────────────────────
 
 /**
- * Get all alerts, newest first.
- * @returns {Promise<Array>}
+ * processRuleTrigger — kept for backward compatibility with ruleEngineService.
+ * Builds a minimal RuleExecutionResult from raw rule + telemetry then delegates.
+ *
+ * @param {Object} rule      - Rule document with .nodes, ._id, .name
+ * @param {Object} telemetry - { sensorId, temperature, ... }
+ * @returns {Promise<Object|null>}
  */
+async function processRuleTrigger(rule, telemetry) {
+  const ruleId   = rule._id ? rule._id.toString() : rule.id || 'unknown';
+  const sensorId = telemetry.sensorId || 'unknown';
+
+  const nodes         = Array.isArray(rule.nodes) ? rule.nodes : [];
+  const alertNode     = nodes.find((n) => n.type === 'alert' || n.type === 'alertNode');
+  const conditionNode = nodes.find((n) => n.type === 'condition' || n.type === 'conditionNode');
+
+  const action    = alertNode?.data?.action   || 'NOTIFICATION';
+  const severity  = alertNode?.data?.severity || 'HIGH';
+  const condData  = conditionNode?.data       || null;
+  const message   = generateAlertMessage(sensorId, telemetry, condData);
+
+  const minimalResult = {
+    ruleId,
+    ruleName:       rule.name || 'Unnamed Rule',
+    sensorId,
+    field:          condData?.field    ?? null,
+    operator:       condData?.operator ?? null,
+    threshold:      condData?.value    ?? null,
+    value:          condData?.field    ? (telemetry[condData.field] ?? null) : null,
+    action,
+    severity,
+    message,
+    timestamp:      telemetry.timestamp
+                      ? new Date(telemetry.timestamp).toISOString()
+                      : new Date().toISOString(),
+    conditionState: 'TRIGGERED',
+  };
+
+  return processExecutionResult(minimalResult);
+}
+
+// ── Query helpers ─────────────────────────────────────────────────────────────
+
 async function getAllAlerts() {
   return Alert.find().sort({ timestamp: -1 });
 }
 
-/**
- * Get single alert by Mongo _id.
- * @param {string} id
- * @returns {Promise<Object|null>}
- */
 async function getAlertById(id) {
   return Alert.findById(id);
 }
 
-/**
- * Mark an alert as read.
- * @param {string} id
- * @returns {Promise<Object|null>}
- */
 async function markAlertAsRead(id) {
-  return Alert.findByIdAndUpdate(
-    id,
-    { status: 'read' },
-    { returnDocument: 'after' }
-  );
+  return Alert.findByIdAndUpdate(id, { status: 'read' }, { returnDocument: 'after' });
 }
 
+// ── Test helpers (exported so tests can reset state) ─────────────────────────
+
+function _resetCooldownMap()       { cooldownMap.clear(); }
+function _resetConditionStateMap() { conditionStateMap.clear(); }
+function _getCooldownMs()          { return COOLDOWN_MS; }
+
 module.exports = {
+  // Primary entry points
+  processExecutionResult,
   processRuleTrigger,
-  generateAlertMessage,
+
+  // Query helpers
   getAllAlerts,
   getAlertById,
   markAlertAsRead,
+
+  // Message builder (used by tests + legacy path)
+  generateAlertMessage,
+
+  // Cooldown helpers exposed for testing
+  isInCooldown,
+  recordCooldown,
+  clearCooldown,
+  getConditionState,
+  setConditionState,
+  _resetCooldownMap,
+  _resetConditionStateMap,
+  _getCooldownMs,
+
+  // Exposed constant
+  COOLDOWN_MS,
 };
