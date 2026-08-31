@@ -49,6 +49,11 @@ export const refreshRule = (id) => {
   return api.get(`/api/rules/${id}`);
 };
 
+// GET /api/rules/runtime/status — running pipeline count for Dashboard metric
+export const getRuntimePipelineStatus = () => {
+  return api.get("/api/rules/runtime/status");
+};
+
 export default {
   createRule,
   getRules,

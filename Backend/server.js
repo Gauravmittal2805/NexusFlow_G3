@@ -2,14 +2,16 @@ require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app          = require('./app');
-const connectDB    = require('./config/db');
-const { initWebSocket }  = require('./websocket/telemetrySocket');
+const app           = require('./app');
+const connectDB     = require('./config/db');
+const { initWebSocket }   = require('./websocket/telemetrySocket');
 const { startSimulator, stopSimulator } = require('./services/telemetrySimulator');
-const { activateAll, deactivateAll }    = require('./compiler/rxjsRuleEngine');
 
-// ── Step 9: Rule Stream Manager — handles ruleId → Subscription lifecycle ─────
-const { cleanupOnShutdown: cleanupStreamManager } = require('./streams/ruleStreamManager');
+// ── Single authoritative rule engine ─────────────────────────────────────────
+// ruleRuntime is the only engine that compiles rules and subscribes pipelines
+// to telemetry$. rxjsRuleEngine is no longer activated at startup — this
+// eliminates the duplicate-subscription problem that was causing double alerts.
+const { activateAll, deactivateAll } = require('./engine/ruleRuntime');
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -40,11 +42,11 @@ server.listen(PORT, async () => {
     // Connect to MongoDB first — the simulator needs it to persist readings
     await connectDB();
 
-    // Start the RxJS rule engine — compile all active rules into memory
-    // pipelines subscribed to the live telemetry$ Subject (Steps 12–13)
+    // Start the single authoritative rule engine — compile all active rules
+    // into RxJS pipelines subscribed to telemetry$
     await activateAll();
 
-    // Start the real-time simulator (replaces the old inline setInterval)
+    // Start the real-time simulator
     startSimulator();
 });
 
@@ -52,9 +54,8 @@ server.listen(PORT, async () => {
 // Step 9: Clean up all active rule subscriptions from both engines before exit
 
 function gracefulShutdown() {
-    deactivateAll();           // rxjsRuleEngine: stop compiled rule pipelines
-    cleanupStreamManager();    // ruleStreamManager: stop stream-manager subscriptions
-    stopSimulator();           // telemetrySimulator: stop data generation
+    deactivateAll();       // ruleRuntime: stop all running rule pipelines
+    stopSimulator();       // telemetrySimulator: stop data generation
     process.exit(0);
 }
 
