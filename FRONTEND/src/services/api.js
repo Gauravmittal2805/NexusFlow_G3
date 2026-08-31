@@ -55,6 +55,10 @@ export const toggleRuleStatusRequest = (id) =>
 export const deleteRuleRequest = (id) =>
   api.delete(`/api/rules/${id}`);
 
+// GET /api/rules/runtime/status — all active pipelines in memory
+export const getRuntimePipelineStatusRequest = () =>
+  api.get("/api/rules/runtime/status");
+
 export const getAlertsRequest = () =>
   api.get("/api/alerts");
 

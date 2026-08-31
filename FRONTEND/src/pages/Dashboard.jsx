@@ -13,7 +13,7 @@
  * - Step 10: Alert navigation to /alerts with automatic detail selection.
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useTelemetry } from "../context/TelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { useAlerts } from "../context/AlertContext";
@@ -22,6 +22,7 @@ import SensorCard from "../components/SensorCard";
 import TelemetryChart from "../components/TelemetryChart";
 import RPMChart from "../components/RPMChart";
 import RecentAlerts from "../components/RecentAlerts";
+import { getRuntimePipelineStatus } from "../services/ruleService";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -39,6 +40,30 @@ export default function Dashboard() {
     isPaused,
     togglePause,
   } = useTelemetry();
+
+  // ── Active Rule Pipelines — live count from ruleRuntime registry ──────────
+  // Fetched from GET /api/rules/runtime/status on mount and every 30 s.
+  // Falls back to "–" while loading so the card never shows a stale number.
+  const [activePipelines, setActivePipelines] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchPipelineCount = async () => {
+      try {
+        const { data } = await getRuntimePipelineStatus();
+        if (!cancelled && data?.success) {
+          setActivePipelines(data.running ?? 0);
+        }
+      } catch {
+        // backend may be unreachable during initial load — keep previous value
+      }
+    };
+
+    fetchPipelineCount();
+    const interval = setInterval(fetchPipelineCount, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   const statusText = {
     connected: isPaused ? "Paused" : "Live",
@@ -145,9 +170,20 @@ export default function Dashboard() {
           <span className="stat-icon">⌘</span>
           <div>
             <small>Active Rule Pipelines</small>
-            <strong>18</strong>
+            <strong>
+              {activePipelines === null ? "–" : activePipelines}
+            </strong>
           </div>
-          <span className="stat-trend" style={{ color: "#16a34a" }}>All Healthy</span>
+          <span
+            className="stat-trend"
+            style={{ color: activePipelines > 0 ? "#16a34a" : "#64748b" }}
+          >
+            {activePipelines === null
+              ? "Loading..."
+              : activePipelines === 0
+              ? "No active rules"
+              : `${activePipelines} Running`}
+          </span>
         </div>
 
         <div className="stat-card">
