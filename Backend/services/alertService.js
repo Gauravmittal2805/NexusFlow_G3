@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * alertService.js — clean rewrite
@@ -6,7 +6,8 @@
  * Legacy entry point:  processRuleTrigger(rule, telemetry)
  */
 
-const Alert = require('../models/Alert');
+const Alert          = require('../models/Alert');
+const { sendWebhook } = require('./webhookService');
 
 const COOLDOWN_MS = parseInt(process.env.ALERT_COOLDOWN_MS, 10) || 60_000;
 const cooldownMap      = new Map();
@@ -54,6 +55,11 @@ async function processExecutionResult(result) {
 
   const alertDoc = await Alert.create({ ruleId, ruleName, sensorId, message, severity, status: 'unread', action, timestamp: timestamp ? new Date(timestamp) : new Date() });
   console.log(`[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ${severity} | ${action} | ${field} ${operator} ${threshold} = ${value}`);
+
+  // Step 5: Fire webhook — attach `value` so the external service has the raw reading
+  sendWebhook({ ...alertDoc.toObject(), value }).catch((err) => {
+    console.error(`[AlertService] Webhook dispatch error (non-fatal): ${err.message}`);
+  });
 
   const socketPayload = { alertId: alertDoc._id, ruleId, ruleName, sensorId, severity, action, message, value, field, operator, threshold, timestamp: alertDoc.timestamp };
   _emit('alert:new', socketPayload);
