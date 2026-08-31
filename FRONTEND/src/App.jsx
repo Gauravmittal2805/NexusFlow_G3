@@ -8,16 +8,8 @@ import FlowBuilder from "./pages/FlowBuilder";
 import RuleBuilder from "./pages/RuleBuilder";
 import Sensors from "./pages/Sensors";
 import Alerts from "./pages/Alerts";
-
-const Placeholder = ({ title }) => (
-  <div className="placeholder-page">
-    <div>
-      <span className="eyebrow">NexusFlow</span>
-      <h1>{title}</h1>
-      <p>This page is scaffolded for the next project phase.</p>
-    </div>
-  </div>
-);
+import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -34,11 +26,10 @@ export default function App() {
           <Route path="rules" element={<RuleBuilder />} />
           <Route path="rule-builder" element={<RuleBuilder />} />
           <Route path="alerts" element={<Alerts />} />
-          <Route path="analytics" element={<Placeholder title="Analytics" />} />
-          <Route path="settings" element={<Placeholder title="Settings" />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Route>
-
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
