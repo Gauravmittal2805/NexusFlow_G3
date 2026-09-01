@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import FlowBuilder from "./pages/FlowBuilder";
 import RuleBuilder from "./pages/RuleBuilder";
+import Rules from "./pages/Rules";
 import Sensors from "./pages/Sensors";
 import Alerts from "./pages/Alerts";
 import Analytics from "./pages/Analytics";
@@ -21,10 +22,10 @@ export default function App() {
         <Route element={<DashboardLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="sensors" element={<Sensors />} />
-          <Route path="flow" element={<FlowBuilder />} />
-          <Route path="rules" element={<RuleBuilder />} />
+          <Route path="rules" element={<Rules />} />
           <Route path="rule-builder" element={<RuleBuilder />} />
+          <Route path="flow" element={<FlowBuilder />} />
+          <Route path="sensors" element={<Sensors />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />

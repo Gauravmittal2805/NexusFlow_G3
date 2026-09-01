@@ -345,6 +345,10 @@ function getRuleStatus(ruleId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function buildTriggerPayload(rule, pipelineResult) {
+  return buildExecutionResult(pipelineResult, rule);
+}
+
 module.exports = {
   activeRules,
   STATUS,
@@ -357,6 +361,7 @@ module.exports = {
   deactivateAll,
   getStatus,
   getRuleStatus,
+  buildTriggerPayload,
   // exposed for testing
   _handleMatch,
   _handleRecovery,

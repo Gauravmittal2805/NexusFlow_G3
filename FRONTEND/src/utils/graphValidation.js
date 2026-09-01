@@ -301,8 +301,16 @@ export function validateGraphStructure(nodes = [], edges = []) {
     }
   });
 
-  if (!pathReachesAction) {
-    errors.push("Sensor node is not connected to an Action node. Connect them to form a complete pipeline.");
+  // Specific connection validation
+  const sensorConnected = sensorNodes.some((s) => (outgoing[s.id] || []).length > 0);
+  const conditionHasIn = conditionNodes.some((c) => (incoming[c.id] || []).length > 0);
+  const conditionHasOut = conditionNodes.some((c) => (outgoing[c.id] || []).length > 0);
+  const actionHasIn = actionNodes.some((a) => (incoming[a.id] || []).length > 0);
+
+  if (!sensorConnected || !conditionHasIn) {
+    errors.push("Please connect the Sensor node to the Condition node.");
+  } else if (!conditionHasOut || !actionHasIn || !pathReachesAction) {
+    errors.push("Please connect the Condition node to the Alert node.");
   }
 
   if (errors.length > 0) {

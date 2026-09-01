@@ -57,7 +57,8 @@ async function processExecutionResult(result) {
   console.log(`[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ${severity} | ${action} | ${field} ${operator} ${threshold} = ${value}`);
 
   // Step 5: Fire webhook — attach `value` so the external service has the raw reading
-  sendWebhook({ ...alertDoc.toObject(), value }).catch((err) => {
+  const docData = alertDoc && typeof alertDoc.toObject === 'function' ? alertDoc.toObject() : alertDoc;
+  sendWebhook({ ...docData, value }).catch((err) => {
     console.error(`[AlertService] Webhook dispatch error (non-fatal): ${err.message}`);
   });
 

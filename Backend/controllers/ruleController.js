@@ -132,10 +132,11 @@ const getRules = async (req, res) => {
 // @access  Private
 const getRuleById = async (req, res) => {
   try {
-    const rule = await Rule.findOne({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
+
+    const rule = await Rule.findOne(filter);
 
     if (!rule) {
       return res.status(404).json({
@@ -167,10 +168,11 @@ const getRuleById = async (req, res) => {
 // @access  Private
 const updateRule = async (req, res) => {
   try {
-    const rule = await Rule.findOne({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
+
+    const rule = await Rule.findOne(filter);
 
     if (!rule) {
       return res.status(404).json({
@@ -255,10 +257,11 @@ const updateRule = async (req, res) => {
 // @access  Private
 const deleteRule = async (req, res) => {
   try {
-    const rule = await Rule.findOneAndDelete({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
+
+    const rule = await Rule.findOneAndDelete(filter);
 
     if (!rule) {
       return res.status(404).json({
@@ -300,10 +303,11 @@ const updateRuleStatus = async (req, res) => {
       });
     }
 
-    const rule = await Rule.findOne({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
+
+    const rule = await Rule.findOne(filter);
 
     if (!rule) {
       return res.status(404).json({
@@ -348,10 +352,11 @@ const updateRuleStatus = async (req, res) => {
 // @access  Private
 const toggleRuleStatus = async (req, res) => {
   try {
-    const rule = await Rule.findOne({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, createdBy: req.user.id };
+
+    const rule = await Rule.findOne(filter);
 
     if (!rule) {
       return res.status(404).json({
