@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * webhookController.js
@@ -22,6 +22,7 @@ exports.receiveWebhook = (req, res) => {
   console.log('\n[WebhookController] ✅ Webhook received:');
   console.log('  Event   :', payload.event     || '-');
   console.log('  Rule    :', payload.ruleName  || '-');
+  console.log('  RuleId  :', payload.ruleId    || '-');
   console.log('  Sensor  :', payload.sensorId  || '-');
   console.log('  Value   :', payload.value      ?? '-');
   console.log('  Severity:', payload.severity  || '-');

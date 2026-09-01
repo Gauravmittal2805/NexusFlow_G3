@@ -35,6 +35,10 @@ const alertSchema = new mongoose.Schema({
     default: 'NOTIFICATION',
     trim: true,
   },
+  value: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
+  },
   timestamp: {
     type: Date,
     default: Date.now,

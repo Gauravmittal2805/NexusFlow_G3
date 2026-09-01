@@ -53,10 +53,20 @@ async function processExecutionResult(result) {
     return null;
   }
 
-  const alertDoc = await Alert.create({ ruleId, ruleName, sensorId, message, severity, status: 'unread', action, timestamp: timestamp ? new Date(timestamp) : new Date() });
+  const alertDoc = await Alert.create({
+    ruleId,
+    ruleName,
+    sensorId,
+    message,
+    severity,
+    status: 'unread',
+    action,
+    value: value != null ? value : null,
+    timestamp: timestamp ? new Date(timestamp) : new Date(),
+  });
   console.log(`[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ${severity} | ${action} | ${field} ${operator} ${threshold} = ${value}`);
 
-  // Step 5: Fire webhook — attach `value` so the external service has the raw reading
+  // Fire webhook asynchronously — non-blocking
   sendWebhook({ ...alertDoc.toObject(), value }).catch((err) => {
     console.error(`[AlertService] Webhook dispatch error (non-fatal): ${err.message}`);
   });
