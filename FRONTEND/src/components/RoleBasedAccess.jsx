@@ -2,8 +2,8 @@ import { useAuth } from "../context/AuthContext";
 
 const ROLE_PERMISSIONS = {
   admin: ["dashboard", "sensors", "flow", "alerts", "analytics", "settings"],
-  operator: ["dashboard", "sensors", "flow", "alerts", "analytics"],
-  viewer: ["dashboard", "sensors", "alerts", "analytics"],
+  operator: ["dashboard", "sensors", "flow", "alerts", "analytics", "settings"],
+  viewer: ["dashboard", "sensors", "alerts", "analytics", "settings"],
 };
 
 export function hasPermission(role, permission) {

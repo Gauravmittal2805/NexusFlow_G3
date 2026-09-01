@@ -127,10 +127,11 @@ export default function Settings() {
   const [alertNotifications, setAlertNotifications] = useState(true);
   const [highSeverityOnly,   setHighSeverityOnly]   = useState(false);
 
-  // Step 8 — Monitoring defaults
+  // Step 8 & 9 — Monitoring defaults
   const [defaultSensor, setDefaultSensor] = useState(sensorIds[0] || "TURBINE-001");
+  const [telemetryInterval, setTelemetryInterval] = useState("5s");
 
-  // Step 9 — Save state
+  // Step 10 — Save state
   const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'success' | 'error'
 
   // Keep defaultSensor in sync when sensorIds load
@@ -140,7 +141,7 @@ export default function Settings() {
     }
   }, [sensorIds, defaultSensor]);
 
-  // Step 9 — Save handler
+  // Step 10 — Save handler
   const handleSave = async () => {
     setSaveStatus("saving");
     try {
@@ -149,8 +150,9 @@ export default function Settings() {
         alertNotifications,
         highSeverityOnly,
         defaultSensor,
+        telemetryInterval,
       }));
-      // Simulate short async operation (would hit a settings API if it existed)
+      // Simulate short async operation
       await new Promise((r) => setTimeout(r, 600));
       setSaveStatus("success");
       setTimeout(() => setSaveStatus(null), 3000);
@@ -167,6 +169,7 @@ export default function Settings() {
       if (typeof saved.alertNotifications === "boolean") setAlertNotifications(saved.alertNotifications);
       if (typeof saved.highSeverityOnly   === "boolean") setHighSeverityOnly(saved.highSeverityOnly);
       if (saved.defaultSensor)                           setDefaultSensor(saved.defaultSensor);
+      if (saved.telemetryInterval)                       setTelemetryInterval(saved.telemetryInterval);
     } catch { /* ignore */ }
   }, []);
 
@@ -237,8 +240,8 @@ export default function Settings() {
 
         {/* ── Step 8: Monitoring ── */}
         <SettingsSection
-          title="Monitoring"
-          description="Default sensor used on the Dashboard and Analytics pages."
+          title="Monitoring Settings"
+          description="Configure default sensor and telemetry refresh rate."
         >
           <SettingsRow
             label="Default Sensor"
@@ -258,9 +261,25 @@ export default function Settings() {
               )}
             </select>
           </SettingsRow>
+
+          <SettingsRow
+            label="Telemetry Update Interval"
+            description="Frequency of simulated or polled sensor data refreshes."
+          >
+            <select
+              className="range-select settings-select"
+              value={telemetryInterval}
+              onChange={(e) => setTelemetryInterval(e.target.value)}
+            >
+              <option value="1s">1 second</option>
+              <option value="2s">2 seconds</option>
+              <option value="5s">5 seconds</option>
+              <option value="10s">10 seconds</option>
+            </select>
+          </SettingsRow>
         </SettingsSection>
 
-        {/* ── Step 9: Save ── */}
+        {/* ── Step 10: Save Changes ── */}
         <div className="settings-save-row">
           {saveStatus === "success" && (
             <span className="settings-save-feedback success">
@@ -269,7 +288,7 @@ export default function Settings() {
           )}
           {saveStatus === "error" && (
             <span className="settings-save-feedback error">
-              ✗ Failed to save settings. Please try again.
+              Unable to save settings. Please try again.
             </span>
           )}
 
