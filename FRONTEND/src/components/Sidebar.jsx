@@ -6,6 +6,7 @@ import { hasPermission } from "./RoleBasedAccess";
 
 const items = [
   { label: "Dashboard", path: "/dashboard", icon: "▦", permission: "dashboard" },
+  { label: "My Rules", path: "/rules", icon: "📋", permission: "rules" },
   { label: "Rule Builder", path: "/flow", icon: "⌘", permission: "flow" },
   { label: "Sensors", path: "/sensors", icon: "◉", permission: "sensors" },
   { label: "Alerts", path: "/alerts", icon: "!", permission: "alerts" },

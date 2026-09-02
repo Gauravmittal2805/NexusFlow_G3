@@ -515,6 +515,12 @@ function FlowCanvas({
 
   // Step 4, 5, 6: Save Rule (Validation -> Serialization -> LocalStorage + Backend API POST/PUT)
   const handleSaveRule = async () => {
+    // Step 7: Rule name validation
+    if (!ruleName || typeof ruleName !== "string" || ruleName.trim() === "") {
+      showToast("error", "⚠ Please enter a rule name before saving.");
+      return;
+    }
+
     // Step 3 & 6: Handle Invalid Rules - Validation check with sanitized human-friendly message
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
@@ -530,12 +536,18 @@ function FlowCanvas({
 
     setIsSaving(true);
 
+    const isExistingMongoId = Boolean(
+      activeRuleId &&
+      activeRuleId.length === 24 &&
+      /^[0-9a-fA-F]{24}$/.test(activeRuleId)
+    );
+
     // Serialization via ruleSerializer.js
     const cleanPayload = serializeRule(nodes, edges, {
-      name: ruleName,
-      description: ruleDescription,
+      name: ruleName.trim(),
+      description: ruleDescription ? ruleDescription.trim() : "",
       id: activeRuleId,
-      _id: activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId) ? activeRuleId : undefined,
+      _id: isExistingMongoId ? activeRuleId : undefined,
       isActive: isRuleActive,
       status: isRuleActive ? "RUNNING" : "INACTIVE"
     });
@@ -552,9 +564,8 @@ function FlowCanvas({
 
       // Connect to backend API: POST /api/rules or PUT /api/rules/:id
       try {
-        const isMongoId = activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId);
         let res;
-        if (isMongoId) {
+        if (isExistingMongoId) {
           try {
             res = await updateRule(activeRuleId, cleanPayload);
           } catch (updateErr) {
@@ -577,8 +588,12 @@ function FlowCanvas({
           compileSuccess = res.data?.compiled !== false;
         }
 
-        // Step 4: Show save state
-        showToast("success", "✓ Rule saved successfully");
+        // Step 1, Step 4 & Step 8: Show save/update state
+        if (isExistingMongoId) {
+          showToast("success", "✓ Rule updated successfully");
+        } else {
+          showToast("success", "✓ Rule created successfully");
+        }
 
         // Step 2 & 5: Add compilation/execution feedback
         if (isRuleActive) {
@@ -752,9 +767,9 @@ function FlowCanvas({
     }
   };
 
-  // Automatic rule loading when navigating from Alert Details (e.g. /flow?ruleId=xyz)
+  // Automatic rule loading when navigating from My Rules or Alerts (e.g. /flow?id=xyz or /flow?ruleId=xyz)
   const [searchParams] = useSearchParams();
-  const urlRuleId = searchParams.get("ruleId");
+  const urlRuleId = searchParams.get("id") || searchParams.get("ruleId");
 
   useEffect(() => {
     if (!urlRuleId) return;
@@ -1059,7 +1074,13 @@ function FlowCanvas({
             disabled={isSaving}
             title="Validate & Save Rule to Database"
           >
-            {isSaving ? "💾 Saving rule..." : "💾 Save Rule"}
+            {isSaving
+              ? (activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId)
+                  ? "💾 Updating rule..."
+                  : "💾 Saving rule...")
+              : (activeRuleId && activeRuleId.length === 24 && /^[0-9a-fA-F]{24}$/.test(activeRuleId)
+                  ? "💾 Update Rule"
+                  : "💾 Save Rule")}
           </button>
         </div>
       </div>
