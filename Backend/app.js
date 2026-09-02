@@ -6,6 +6,7 @@ const sensorRoutes = require('./routes/sensorRoutes');
 const userRoutes = require('./routes/userRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const telemetryRoutes = require('./routes/telemetryRoutes');
 const app = express();
 
 app.use(cors({
@@ -29,6 +30,7 @@ app.get('/api/health', (req, res) => {
         message: "NexusFlow Backend is running"
     });
 });
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/rules', ruleRoutes);
@@ -36,35 +38,7 @@ app.use('/api/sensors', sensorRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/webhook', webhookRoutes);
-
-// REST telemetry endpoint (returns latest mock data)
-app.get('/telemetry', (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            sensorId: 'TURBINE-001',
-            timestamp: new Date().toISOString(),
-            temperature: +(78 + Math.random() * 4).toFixed(1),
-            pressure: +(118 + Math.random() * 5).toFixed(1),
-            humidity: +(40 + Math.random() * 8).toFixed(1),
-            rpm: Math.round(1780 + Math.random() * 50),
-        },
-    });
-});
-
-app.get('/telemetry/:sensorId', (req, res) => {
-    const { sensorId } = req.params;
-    res.json({
-        success: true,
-        data: {
-            sensorId,
-            timestamp: new Date().toISOString(),
-            temperature: +(78 + Math.random() * 4).toFixed(1),
-            pressure: +(118 + Math.random() * 5).toFixed(1),
-            humidity: +(40 + Math.random() * 8).toFixed(1),
-            rpm: Math.round(1780 + Math.random() * 50),
-        },
-    });
-});
+app.use('/api/telemetry', telemetryRoutes);
+app.use('/telemetry', telemetryRoutes);
 
 module.exports = app;

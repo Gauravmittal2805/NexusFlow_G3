@@ -5,6 +5,10 @@ const {
   getAlertById,
   markAlertAsRead,
 } = require('../controllers/alertController');
+const { protect } = require('../middleware/authMiddleware');
+
+// All alert routes require authentication
+router.use(protect);
 
 // GET /api/alerts — Fetch all alerts (newest first)
 router.get('/', getAlerts);
