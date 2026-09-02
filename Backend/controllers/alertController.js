@@ -1,8 +1,9 @@
+const mongoose     = require('mongoose');
 const alertService = require('../services/alertService');
 
 // @desc    Get all alerts (newest first)
 // @route   GET /api/alerts
-// @access  Public (consumed by Member 4's frontend)
+// @access  Public / Authenticated
 exports.getAlerts = async (req, res) => {
   try {
     const alerts = await alertService.getAllAlerts();
@@ -19,10 +20,15 @@ exports.getAlerts = async (req, res) => {
 
 // @desc    Get single alert by ID
 // @route   GET /api/alerts/:id
-// @access  Public
+// @access  Public / Authenticated
 exports.getAlertById = async (req, res) => {
   try {
-    const alert = await alertService.getAlertById(req.params.id);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid alert ID format' });
+    }
+
+    const alert = await alertService.getAlertById(id);
     if (!alert) {
       return res.status(404).json({ success: false, message: 'Alert not found' });
     }
@@ -35,10 +41,15 @@ exports.getAlertById = async (req, res) => {
 
 // @desc    Mark alert as read
 // @route   PATCH /api/alerts/:id/read
-// @access  Public (consumed by Member 4's frontend)
+// @access  Public / Authenticated
 exports.markAlertAsRead = async (req, res) => {
   try {
-    const alert = await alertService.markAlertAsRead(req.params.id);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid alert ID format' });
+    }
+
+    const alert = await alertService.markAlertAsRead(id);
     if (!alert) {
       return res.status(404).json({ success: false, message: 'Alert not found' });
     }
@@ -52,3 +63,4 @@ exports.markAlertAsRead = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
