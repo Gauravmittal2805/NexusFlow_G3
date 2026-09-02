@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import api from "../services/api";
 
 // ── Simple toggle component ────────────────────────────────────────────────────
 
@@ -145,18 +146,31 @@ export default function Settings() {
   const handleSave = async () => {
     setSaveStatus("saving");
     try {
-      // Persist to localStorage so the preference survives a refresh
-      localStorage.setItem("nx_settings", JSON.stringify({
+      // Prepare settings payload
+      const settingsPayload = {
         alertNotifications,
         highSeverityOnly,
         defaultSensor,
         telemetryInterval,
-      }));
-      // Simulate short async operation
+      };
+
+      // Persist to localStorage so the preference survives a refresh
+      localStorage.setItem("nx_settings", JSON.stringify(settingsPayload));
+
+      // Try to save to backend (if user preferences endpoint exists)
+      try {
+        await api.put('/api/users/preferences', settingsPayload);
+      } catch (apiError) {
+        console.warn('[Settings] Backend preferences API not available, using localStorage only:', apiError.message);
+      }
+
+      // Simulate short async operation for UI feedback
       await new Promise((r) => setTimeout(r, 600));
+      
       setSaveStatus("success");
       setTimeout(() => setSaveStatus(null), 3000);
-    } catch {
+    } catch (error) {
+      console.error('[Settings] Error saving settings:', error);
       setSaveStatus("error");
       setTimeout(() => setSaveStatus(null), 3000);
     }

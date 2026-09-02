@@ -6412,3 +6412,536 @@ button {
   color: #b91c1c;
   border: 1px solid #fca5a5;
 }
+
+/* ==========================================================================
+   UI CONSISTENCY IMPROVEMENTS - Production Polish
+   ========================================================================== */
+
+/* Ensure all panels have consistent min-height to prevent layout shift */
+.panel {
+  min-height: 200px;
+}
+
+/* Consistent loading state across all pages */
+.page-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: 300px;
+  gap: 12px;
+}
+
+.page-loading-state .spinner {
+  margin-bottom: 8px;
+}
+
+.page-loading-state span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Consistent error state styling */
+.page-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: 300px;
+  gap: 16px;
+  text-align: center;
+}
+
+.page-error-state .error-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.page-error-state h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.page-error-state p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 400px;
+}
+
+.page-error-state button {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.page-error-state button:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+/* Consistent empty state styling */
+.page-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: 300px;
+  gap: 12px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.page-empty-state .empty-icon {
+  font-size: 42px;
+  opacity: 0.4;
+}
+
+.page-empty-state h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.page-empty-state p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  max-width: 380px;
+}
+
+/* Improved button consistency */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Ensure form inputs have consistent styling */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+/* Responsive typography adjustments */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 22px;
+  }
+
+  .hero p {
+    font-size: 12px;
+  }
+
+  .section-heading h2,
+  .panel-header h2 {
+    font-size: 15px;
+  }
+
+  .analytics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-header h1 {
+    font-size: 22px;
+  }
+}
+
+/* Improved mobile navigation spacing */
+@media (max-width: 560px) {
+  .content {
+    padding: 16px 12px;
+  }
+
+  .dashboard {
+    width: 100%;
+  }
+
+  .analytics-page {
+    padding: 16px 12px;
+  }
+
+  .settings-page {
+    padding: 16px 12px;
+  }
+
+  .flow-builder-page {
+    padding: 12px;
+  }
+}
+
+/* Smooth transitions for interactive elements */
+.nav-item,
+.icon-button,
+.stat-card,
+.sensor-card,
+.alert-card,
+.draggable-node-item,
+.add-node-menu-item {
+  transition: all 0.2s ease;
+}
+
+/* Ensure tooltips and popovers are above other content */
+[role="tooltip"],
+.tooltip,
+.popover {
+  z-index: 1000;
+}
+
+/* Consistent focus states for accessibility */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+}
+
+/* Improved card hover states */
+.stat-card:hover,
+.sensor-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Consistent badge styling */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge.success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.badge.warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.badge.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge.info {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+/* Scrollbar styling for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+/* Improved analytics bottom grid responsiveness */
+@media (max-width: 1200px) {
+  .analytics-bottom-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .analytics-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Improved settings section spacing on mobile */
+@media (max-width: 600px) {
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .settings-row-control {
+    width: 100%;
+  }
+
+  .settings-select {
+    width: 100%;
+  }
+
+  .settings-save-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-save-btn {
+    width: 100%;
+  }
+}
+
+/* Improved dashboard grid responsiveness */
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sensor-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* Better spacing for metric tabs on mobile */
+@media (max-width: 640px) {
+  .analytics-metric-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .analytics-tab-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* Improved loading skeleton animation */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(to right, #f0f2f5 0%, #e4e6eb 20%, #f0f2f5 40%, #f0f2f5 100%);
+  background-size: 800px 104px;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: 8px;
+}
+
+/* Ensure charts are responsive */
+.chart-wrap,
+.recharts-wrapper {
+  width: 100% !important;
+}
+
+/* Better alignment for filter controls */
+.analytics-header > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .analytics-header > div:last-child {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+/* Consistent spacing for eyebrow labels */
+.eyebrow {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Improved panel header alignment */
+.panel-header {
+  margin-bottom: 16px;
+}
+
+.panel-header > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Better mobile layout for hero section */
+@media (max-width: 640px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .live-badge {
+    align-self: flex-start;
+  }
+}
+
+/* Improved connection warning visibility */
+.connection-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.connection-warning span:first-child {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Consistent border radius across components */
+.panel,
+.stat-card,
+.sensor-card,
+.alert-card,
+.settings-section,
+.flow-builder-header,
+.node-library-panel,
+.flow-canvas-wrapper {
+  border-radius: 12px;
+}
+
+/* Improved button group spacing */
+.button-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .button-group {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .button-group button {
+    width: 100%;
+  }
+}
+
+/* Better table responsiveness (if tables are added later) */
+@media (max-width: 768px) {
+  .data-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Improved sensor overview spacing */
+.sensor-overview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Consistent icon sizing */
+.icon-sm {
+  font-size: 14px;
+}
+
+.icon-md {
+  font-size: 18px;
+}
+
+.icon-lg {
+  font-size: 24px;
+}
+
+/* Better spacing for analytics state boxes */
+.analytics-state-box {
+  margin: 20px 0;
+}
+
+/* Improved alert severity indicator consistency */
+.alert-severity {
+  flex-shrink: 0;
+}
+
+/* Better focus indicators for keyboard navigation */
+.nav-item:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+
+/* Ensure proper stacking context for modals and overlays */
+.modal-overlay {
+  z-index: 9999;
+}
+
+.modal-content {
+  z-index: 10000;
+}
+
+/* Improved print styles */
+@media print {
+  .sidebar,
+  .navbar,
+  .button-group,
+  .canvas-actions {
+    display: none !important;
+  }
+
+  .main-area {
+    margin: 0;
+    padding: 0;
+  }
+
+  .panel {
+    break-inside: avoid;
+  }
+}

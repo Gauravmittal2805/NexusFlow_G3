@@ -10,7 +10,7 @@
  * Step 6 — Alerts Over Time frequency chart
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -27,6 +27,13 @@ import {
 } from "recharts";
 import { useAlerts } from "../context/AlertContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import {
+  fetchAllTelemetry,
+  fetchSensorTelemetry,
+  filterTelemetryByTimeRange,
+  transformTelemetryForChart,
+  groupTelemetrybySensor,
+} from "../services/telemetryService";
 
 // ── Time-range definitions (Step 4) ──────────────────────────────────────────
 
@@ -343,8 +350,60 @@ export default function Analytics() {
   // Step 4: Time range state
   const [timeRange, setTimeRange] = useState("24h");
 
+  // API data state
+  const [historicalData, setHistoricalData] = useState([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState(null);
+
+  // Fetch historical telemetry data from MongoDB API
+  useEffect(() => {
+    const loadHistoricalData = async () => {
+      setIsLoadingData(true);
+      setDataError(null);
+
+      try {
+        let data;
+        
+        // Fetch data based on sensor filter
+        if (sensorFilter === "All") {
+          data = await fetchAllTelemetry();
+        } else {
+          data = await fetchSensorTelemetry(sensorFilter);
+        }
+
+        // Transform data for charts
+        const transformed = transformTelemetryForChart(data);
+        
+        // Apply time range filter
+        const range = TIME_RANGES.find((r) => r.value === timeRange);
+        const filtered = filterTelemetryByTimeRange(transformed, range?.ms ?? TIME_RANGES[1].ms);
+
+        setHistoricalData(filtered);
+      } catch (error) {
+        console.error('[Analytics] Failed to load historical telemetry:', error);
+        setDataError('Unable to load historical data. Using live stream data.');
+        
+        // Fallback to context data
+        const source = sensorFilter === "All"
+          ? Object.values(historyBySensor).flat()
+          : (historyBySensor[sensorFilter] || []);
+        setHistoricalData(source);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    loadHistoricalData();
+  }, [sensorFilter, timeRange, historyBySensor]);
+
   // ── Filter historical telemetry by time range and sensor ───────────────────
   const filteredHistory = useMemo(() => {
+    // If we have API data, use it; otherwise fall back to context data
+    if (historicalData.length > 0) {
+      return historicalData;
+    }
+
+    // Fallback to WebSocket context data
     const range = TIME_RANGES.find((r) => r.value === timeRange);
     const cutoff = Date.now() - (range?.ms ?? TIME_RANGES[1].ms);
 
@@ -362,11 +421,11 @@ export default function Analytics() {
       if (!p.timestamp) return true;
       return new Date(p.timestamp).getTime() >= cutoff;
     });
-  }, [historyBySensor, sensorFilter, timeRange]);
+  }, [historicalData, historyBySensor, sensorFilter, timeRange]);
 
   const sensorOptions = ["All", ...sensorIds];
   const hasData = filteredHistory.length > 0;
-  const isLoading = connectionStatus === "reconnecting" && filteredHistory.length === 0;
+  const isLoading = (isLoadingData || (connectionStatus === "reconnecting" && filteredHistory.length === 0));
 
   // Active single metric config if not "all"
   const currentMetricConfig = selectedMetric !== "all" ? METRIC_CONFIG[selectedMetric] : null;
@@ -455,7 +514,7 @@ export default function Analytics() {
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-header">
           <div>
-            <span className="eyebrow">Real-Time Telemetry Stream</span>
+            <span className="eyebrow">Real-Time Telemetry Stream • MongoDB Backend</span>
             <h2>
               {selectedMetric === "all"
                 ? "Combined Telemetry Trends (Temperature, Pressure, Humidity, RPM)"
@@ -468,10 +527,28 @@ export default function Analytics() {
           </span>
         </div>
 
+        {dataError && (
+          <div style={{
+            backgroundColor: "#fef3c7",
+            color: "#b45309",
+            border: "1px solid #fde68a",
+            padding: "10px 14px",
+            borderRadius: "8px",
+            margin: "0 0 12px 0",
+            fontSize: "12px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            <span>⚠️</span>
+            <span>{dataError}</span>
+          </div>
+        )}
+
         {isLoading && (
           <div className="analytics-state-box">
             <div className="spinner" />
-            <span>Loading telemetry data...</span>
+            <span>Loading telemetry data from MongoDB...</span>
           </div>
         )}
 

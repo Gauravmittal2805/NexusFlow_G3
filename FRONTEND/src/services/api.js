@@ -21,9 +21,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-export const getTelemetry = () => api.get("/telemetry");
+// Telemetry API endpoints
+export const getTelemetry = () => api.get("/api/telemetry");
 export const getSensorTelemetry = (sensorId) =>
-  api.get(`/telemetry/${sensorId}`);
+  api.get(`/api/telemetry/${sensorId}`);
 
 export const registerRequest = (payload) =>
   api.post("/api/auth/register", payload);
