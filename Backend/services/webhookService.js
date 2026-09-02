@@ -1,28 +1,24 @@
-﻿'use strict';
+'use strict';
 
 /**
- * webhookService.js — Day 1 Webhook Integration
+ * webhookService.js — Day 2 Webhook Integration & Dispatch
  *
- * Responsibility:
- *   sendWebhook(alert) — fires a POST request to WEBHOOK_URL whenever
- *   an alert is created by the Rule Engine, so external systems
- *   (SMS providers, notification hubs, etc.) can react in real-time.
- *
- * Standard payload sent to the external endpoint:
- * {
- *   "event":     "RULE_TRIGGERED",
- *   "ruleName":  "High Temperature Alert",
- *   "sensorId":  "TURBINE-001",
- *   "severity":  "HIGH",
- *   "message":   "Temperature exceeded 80 degrees C",
- *   "value":     92.8,
- *   "timestamp": "2026-08-31T10:30:00Z"
- * }
- *
- * Design decisions:
- *  - WEBHOOK_URL is read from process.env — never hard-coded.
- *  - Failures are caught and logged; they NEVER crash the core alert pipeline.
- *  - Uses built-in Node.js https/http module (no extra npm dependencies).
+ * Responsibilities:
+ * ─────────────────
+ * 1. Finalize Alert Payload Contract (Step 2):
+ *    {
+ *      "event": "RULE_TRIGGERED",
+ *      "ruleName": "High Temperature Alert",
+ *      "ruleId": "RULE_ID",
+ *      "sensorId": "TURBINE-001",
+ *      "severity": "HIGH",
+ *      "message": "Temperature exceeded 80°C",
+ *      "value": 92,
+ *      "timestamp": "2026-08-31T10:30:00Z"
+ *    }
+ * 2. Send asynchronous, non-blocking webhook POST requests to WEBHOOK_URL (Step 5).
+ * 3. Graceful failure handling without crashing the backend or alert pipeline (Step 4).
+ * 4. Structured response logging for success and failure (Step 6).
  */
 
 const https = require('https');
@@ -31,23 +27,27 @@ const http  = require('http');
 /**
  * Sends a webhook POST request to the configured WEBHOOK_URL.
  *
- * @param {Object} alert - Alert document from Alert.create()
- *   Expected shape: { ruleName, sensorId, severity, message, value, timestamp, ... }
- * @returns {Promise<void>} Resolves when request completes (or fails gracefully).
+ * @param {Object} alert - Alert document or object
+ *   Expected shape: { ruleId, ruleName, sensorId, severity, message, value, timestamp, _id }
+ * @returns {Promise<{ success: boolean, statusCode?: number, error?: string }>} Resolves gracefully without rejecting.
  */
-async function sendWebhook(alert) {
+async function sendWebhook(alert = {}) {
   const webhookUrl = process.env.WEBHOOK_URL;
+  const alertId = alert._id ? String(alert._id) : (alert.ruleId ? String(alert.ruleId) : 'unknown');
+  const ruleName = alert.ruleName || 'Unknown Rule';
+  const sensorId = alert.sensorId || 'unknown';
 
   if (!webhookUrl) {
-    console.warn('[WebhookService] WEBHOOK_URL is not set in .env — skipping webhook.');
-    return;
+    console.warn('[WebhookService] WEBHOOK_URL is not set in environment — skipping webhook.');
+    return { success: false, error: 'WEBHOOK_URL not configured' };
   }
 
-  // Standard payload contract (Step 3)
-  const payload = JSON.stringify({
+  // Step 2: Finalized Standard Alert Payload
+  const payloadData = {
     event:     'RULE_TRIGGERED',
-    ruleName:  alert.ruleName  || 'Unknown Rule',
-    sensorId:  alert.sensorId  || 'unknown',
+    ruleName:  ruleName,
+    ruleId:    alert.ruleId ? String(alert.ruleId) : alertId,
+    sensorId:  sensorId,
     severity:  alert.severity  || 'HIGH',
     message:   alert.message   || '',
     value:     alert.value     != null ? alert.value : null,
@@ -56,15 +56,23 @@ async function sendWebhook(alert) {
           ? alert.timestamp.toISOString()
           : String(alert.timestamp))
       : new Date().toISOString(),
-  });
+  };
 
-  // Parse URL and choose http vs https transport
+  const payload = JSON.stringify(payloadData);
+
+  // Parse URL and choose transport
   let parsedUrl;
   try {
     parsedUrl = new URL(webhookUrl);
   } catch (err) {
-    console.error('[WebhookService] Invalid WEBHOOK_URL "' + webhookUrl + '": ' + err.message);
-    return;
+    console.error(
+      `[WebhookService] Webhook failed\n` +
+      `  Status: Invalid URL (${err.message})\n` +
+      `  Alert: ${ruleName}\n` +
+      `  Sensor: ${sensorId}\n` +
+      `  Webhook delivery failed for alert ${alertId}`
+    );
+    return { success: false, error: `Invalid URL: ${err.message}` };
   }
 
   const transport = parsedUrl.protocol === 'https:' ? https : http;
@@ -77,7 +85,7 @@ async function sendWebhook(alert) {
       'Content-Type':   'application/json',
       'Content-Length': Buffer.byteLength(payload),
     },
-    timeout: 5000, // 5-second timeout — never block the alert pipeline
+    timeout: 5000, // 5-second timeout — never blocks the alert pipeline
   };
 
   return new Promise((resolve) => {
@@ -85,34 +93,52 @@ async function sendWebhook(alert) {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
-        console.log(
-          '[WebhookService] Webhook delivered to ' + webhookUrl +
-          ' | HTTP ' + res.statusCode +
-          ' | Rule: "' + alert.ruleName + '"' +
-          ' | Sensor: ' + alert.sensorId
-        );
-        resolve();
+        const isSuccess = res.statusCode >= 200 && res.statusCode < 300;
+        if (isSuccess) {
+          // Step 6: Success Logging
+          console.log(
+            `[WebhookService] Webhook sent successfully\n` +
+            `  Status: ${res.statusCode}\n` +
+            `  Alert: ${ruleName}\n` +
+            `  Sensor: ${sensorId}`
+          );
+        } else {
+          // Step 6: Non-2xx Failure Logging
+          console.error(
+            `[WebhookService] Webhook failed\n` +
+            `  Status: ${res.statusCode}\n` +
+            `  Alert: ${ruleName}\n` +
+            `  Sensor: ${sensorId}\n` +
+            `  Webhook delivery failed for alert ${alertId}`
+          );
+        }
+        resolve({ success: isSuccess, statusCode: res.statusCode });
       });
     });
 
-    // Step 8: Graceful failure — log and resolve, NEVER reject
-    // An external webhook failure must NEVER crash the core alert pipeline.
+    // Step 4 & 6: Connection Error Handling & Logging
     req.on('error', (err) => {
       console.error(
-        '[WebhookService] Webhook failed (URL: ' + webhookUrl + ')\n' +
-        '  Error: ' + err.message + '\n' +
-        '  Alert was still created successfully. Core pipeline unaffected.'
+        `[WebhookService] Webhook failed\n` +
+        `  Status: Connection Error (${err.message})\n` +
+        `  Alert: ${ruleName}\n` +
+        `  Sensor: ${sensorId}\n` +
+        `  Webhook delivery failed for alert ${alertId}`
       );
-      resolve(); // intentionally resolve (not reject)
+      resolve({ success: false, error: err.message }); // Always resolve, never reject
     });
 
+    // Timeout Handling
     req.on('timeout', () => {
       console.error(
-        '[WebhookService] Webhook timed out after 5s (URL: ' + webhookUrl + ')\n' +
-        '  Alert was still created successfully. Core pipeline unaffected.'
+        `[WebhookService] Webhook failed\n` +
+        `  Status: Connection Error (Timeout after 5s)\n` +
+        `  Alert: ${ruleName}\n` +
+        `  Sensor: ${sensorId}\n` +
+        `  Webhook delivery failed for alert ${alertId}`
       );
       req.destroy();
-      resolve();
+      resolve({ success: false, error: 'Timeout after 5s' });
     });
 
     req.write(payload);
