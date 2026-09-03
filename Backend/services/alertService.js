@@ -67,7 +67,8 @@ async function processExecutionResult(result) {
   console.log(`[AlertService] 🚨 ALERT      "${ruleName}" | Sensor: ${sensorId} | ${severity} | ${action} | ${field} ${operator} ${threshold} = ${value}`);
 
   // Fire webhook asynchronously — non-blocking
-  sendWebhook({ ...alertDoc.toObject(), value }).catch((err) => {
+  const alertPayload = alertDoc.toObject ? alertDoc.toObject() : alertDoc;
+  sendWebhook({ ...alertPayload, value }).catch((err) => {
     console.error(`[AlertService] Webhook dispatch error (non-fatal): ${err.message}`);
   });
 

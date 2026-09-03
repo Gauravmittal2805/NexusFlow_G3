@@ -525,10 +525,10 @@ function FlowCanvas({
     const validation = validateGraph(nodes, edges);
     if (!validation.valid) {
       const cleanError = sanitizeCompilationError(validation.message || validation.errors?.[0] || "Condition node is missing a value.");
-      showToast("error", `⚠ Rule could not be executed: ${cleanError}`);
+      showToast("error", `⚠ ${cleanError}`);
       setCompilationFeedback({
         status: "error",
-        message: `⚠ Rule could not be executed: ${cleanError}`
+        message: `⚠ ${cleanError}`
       });
       setRuleStatus("COMPILATION_FAILED");
       return;
