@@ -242,13 +242,11 @@ export function TelemetryProvider({ children }) {
     connectSocket();
 
     const handleConnect = () => {
-      console.log("[TelemetryContext] 🔌 Socket.IO connected to telemetry stream");
       setConnectionStatus("connected");
       setConnectionError("");
     };
 
-    const handleDisconnect = (reason) => {
-      console.warn("[TelemetryContext] ⚠️ Socket.IO disconnected:", reason);
+    const handleDisconnect = () => {
       setConnectionStatus("disconnected");
     };
 

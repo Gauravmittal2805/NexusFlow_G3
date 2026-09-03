@@ -1,16 +1,16 @@
 /**
  * Analytics.jsx — NexusFlow Real-Time Telemetry & Alert Analytics
  *
- * Steps 1–6 + UI Consistency:
+ * Steps 1–6 + Full Backend API Integration:
  * Step 1 — Historical Telemetry in Charts (Temperature, Pressure, Humidity, RPM)
  * Step 2 — Metric Selector dropdown & tabs (Temperature, Pressure, Humidity, RPM, All)
  * Step 3 — Sensor Filter (TURBINE-001, TURBINE-002, TURBINE-003, All)
  * Step 4 — Time Range Filter (Last 1 Hour, Last 24 Hours, Last 7 Days, Last 30 Days)
- * Step 5 — Alert Analytics (Total Alerts, HIGH, MEDIUM, LOW)
- * Step 6 — Alerts Over Time frequency chart
+ * Step 5 — Alert Analytics (Total Alerts, HIGH, MEDIUM, LOW) from /api/analytics/alerts
+ * Step 6 — Alerts Over Time frequency chart from backend
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -27,6 +27,11 @@ import {
 } from "recharts";
 import { useAlerts } from "../context/AlertContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import {
+  getAnalyticsAlerts,
+  getAnalyticsTelemetry,
+  getAnalyticsSensors,
+} from "../services/api";
 
 // ── Time-range definitions (Step 4) ──────────────────────────────────────────
 
@@ -99,26 +104,26 @@ function TelemetryTooltip({ active, payload, label }) {
       fontSize: "12px",
       boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
       border: "1px solid #334155",
-      minWidth: 140,
+      minWidth: 160,
     }}>
       <div style={{ color: "#94a3b8", fontWeight: 700, marginBottom: 6, borderBottom: "1px solid #334155", paddingBottom: 4 }}>
-        Time: {label}
+        {label}
       </div>
       {payload.map((item) => (
-        <div key={item.dataKey} style={{ color: item.color, display: "flex", justifyContent: "space-between", gap: 12, margin: "4px 0" }}>
+        <div key={item.dataKey} style={{ color: item.color, display: "flex", justifyContent: "space-between", gap: 12, margin: "3px 0" }}>
           <span>{item.name}:</span>
-          <strong>{item.value != null ? item.value : "–"}</strong>
+          <strong>{typeof item.value === "number" ? item.value.toFixed(1) : item.value}</strong>
         </div>
       ))}
     </div>
   );
 }
 
-// ── Custom Tooltip for Alert Frequency Chart ─────────────────────────────────
+// ── Custom Tooltip for Alert Chart ───────────────────────────────────────────
 
 function AlertChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
-  const total = payload.reduce((sum, p) => sum + (Number(p.value) || 0), 0);
+  const total = payload.reduce((s, p) => s + (p.value || 0), 0);
   return (
     <div style={{
       background: "#1e293b",
@@ -145,35 +150,23 @@ function AlertChartTooltip({ active, payload, label }) {
 
 // ── Step 5: Alert Statistics Panel ───────────────────────────────────────────
 
-function AlertStatsPanel({ alerts, sensorFilter }) {
-  const filtered = sensorFilter === "All"
-    ? alerts
-    : alerts.filter((a) => a.sensorId === sensorFilter);
-
-  const total  = filtered.length;
-  const high   = filtered.filter((a) => (a.severity || "").toUpperCase() === "HIGH" || (a.severity || "").toUpperCase() === "CRITICAL").length;
-  const medium = filtered.filter((a) => (a.severity || "").toUpperCase() === "MEDIUM").length;
-  const low    = filtered.filter((a) => (a.severity || "").toUpperCase() === "LOW" || (a.severity || "").toUpperCase() === "INFO").length;
-
+function AlertStatsPanel({ alertStats, loading }) {
   const rows = [
-    { label: "Total Alerts", value: total,  color: "#172033", bg: "#f1edff", accent: "#7c3aed" },
-    { label: "HIGH",         value: high,   color: "#dc2626", bg: "#fef2f2", accent: "#ef4444" },
-    { label: "MEDIUM",       value: medium, color: "#d97706", bg: "#fffbeb", accent: "#f59e0b" },
-    { label: "LOW",          value: low,    color: "#16a34a", bg: "#f0fdf4", accent: "#22c55e" },
+    { label: "Total Alerts", value: alertStats.total,    color: "#172033", bg: "#f1edff", accent: "#7c3aed" },
+    { label: "HIGH",         value: alertStats.high,     color: "#dc2626", bg: "#fef2f2", accent: "#ef4444" },
+    { label: "MEDIUM",       value: alertStats.medium,   color: "#d97706", bg: "#fffbeb", accent: "#f59e0b" },
+    { label: "LOW",          value: alertStats.low,      color: "#16a34a", bg: "#f0fdf4", accent: "#22c55e" },
+    { label: "CRITICAL",     value: alertStats.critical, color: "#7c3aed", bg: "#faf5ff", accent: "#a855f7" },
   ];
 
   return (
     <div className="panel" style={{ height: "100%" }}>
       <div className="panel-header" style={{ marginBottom: 16 }}>
         <div>
-          <span className="eyebrow">Step 5 • Live Alert Data</span>
+          <span className="eyebrow">Live Alert Data</span>
           <h2>Alert Statistics</h2>
         </div>
-        {sensorFilter !== "All" && (
-          <span style={{ fontSize: 11, background: "#f1edff", color: "#7c3aed", padding: "3px 10px", borderRadius: 6, fontWeight: 700 }}>
-            {sensorFilter}
-          </span>
-        )}
+        {loading && <div className="spinner" style={{ width: 16, height: 16 }} />}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -187,7 +180,7 @@ function AlertStatsPanel({ alerts, sensorFilter }) {
               {row.label}
             </span>
             <strong style={{ fontSize: 22, color: row.color, letterSpacing: "-0.04em" }}>
-              {row.value.toString().padStart(2, "0")}
+              {(row.value ?? 0).toString().padStart(2, "0")}
             </strong>
           </div>
         ))}
@@ -198,82 +191,52 @@ function AlertStatsPanel({ alerts, sensorFilter }) {
 
 // ── Step 6: Alerts Over Time Frequency Component ─────────────────────────────
 
-function AlertsOverTimePanel({ alerts, sensorFilter }) {
-  const filtered = sensorFilter === "All"
-    ? alerts
-    : alerts.filter((a) => a.sensorId === sensorFilter);
-
-  // Group alerts by day of week / time interval
-  const chartData = useMemo(() => {
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const buckets = {};
-
-    // Initialize the last 7 days buckets
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dayName = days[d.getDay()];
-      const key = `${dayName} ${d.getDate()}/${d.getMonth() + 1}`;
-      buckets[key] = { label: dayName, fullDate: key, high: 0, medium: 0, low: 0, total: 0 };
-    }
-
-    // Populate with real alerts
-    filtered.forEach((alert) => {
-      const alertDate = new Date(alert.timestamp || alert.createdAt || Date.now());
-      if (isNaN(alertDate.getTime())) return;
-      const dayName = days[alertDate.getDay()];
-      const key = `${dayName} ${alertDate.getDate()}/${alertDate.getMonth() + 1}`;
-
-      if (!buckets[key]) {
-        buckets[key] = { label: dayName, fullDate: key, high: 0, medium: 0, low: 0, total: 0 };
-      }
-
-      const sev = (alert.severity || "HIGH").toUpperCase();
-      if (sev === "HIGH" || sev === "CRITICAL") buckets[key].high += 1;
-      else if (sev === "MEDIUM") buckets[key].medium += 1;
-      else buckets[key].low += 1;
-      buckets[key].total += 1;
-    });
-
-    const result = Object.values(buckets);
-    // If no historical alerts in buckets, ensure default structure with total 0
-    return result;
-  }, [filtered]);
-
+function AlertsOverTimePanel({ frequencyData, totalAlerts, loading }) {
   return (
     <div className="panel" style={{ height: "100%" }}>
       <div className="panel-header" style={{ marginBottom: 16 }}>
         <div>
-          <span className="eyebrow">Step 6 • Historical Insight</span>
+          <span className="eyebrow">Historical Insight</span>
           <h2>Alerts Over Time</h2>
         </div>
         <span className="updated-label">
-          {filtered.length} Total Alerts Recorded
+          {loading ? "Loading..." : `${totalAlerts} Total Alerts`}
         </span>
       </div>
 
-      <div style={{ height: 210, width: "100%" }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
-            <Tooltip content={<AlertChartTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-            <Bar dataKey="high" name="High" fill="#ef4444" radius={[4, 4, 0, 0]} stackId="a" />
-            <Bar dataKey="medium" name="Medium" fill="#f59e0b" radius={[4, 4, 0, 0]} stackId="a" />
-            <Bar dataKey="low" name="Low" fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {loading ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 180, gap: 8 }}>
+          <div className="spinner" />
+          <span style={{ color: "#64748b", fontSize: 13 }}>Loading chart data...</span>
+        </div>
+      ) : frequencyData.length === 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 180, gap: 8, color: "#94a3b8" }}>
+          <span style={{ fontSize: 28 }}>📊</span>
+          <span style={{ fontSize: 13 }}>No alert history available yet.</span>
+        </div>
+      ) : (
+        <div style={{ height: 210, width: "100%" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={frequencyData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
+              <Tooltip content={<AlertChartTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+              <Bar dataKey="high"   name="High"   fill="#ef4444" radius={[4, 4, 0, 0]} stackId="a" />
+              <Bar dataKey="medium" name="Medium" fill="#f59e0b" radius={[4, 4, 0, 0]} stackId="a" />
+              <Bar dataKey="low"    name="Low"    fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Sensor Overview Mini-Cards ───────────────────────────────────────────────
 
-function SensorOverviewPanel({ telemetryBySensor, sensorIds }) {
+function SensorOverviewPanel({ telemetryBySensor, sensorIds, apiSensors, loadingApiSensors }) {
   return (
     <div className="panel" style={{ height: "100%" }}>
       <div className="panel-header" style={{ marginBottom: 16 }}>
@@ -281,11 +244,20 @@ function SensorOverviewPanel({ telemetryBySensor, sensorIds }) {
           <span className="eyebrow">Fleet Status</span>
           <h2>Sensor Overview</h2>
         </div>
+        {loadingApiSensors && <div className="spinner" style={{ width: 16, height: 16 }} />}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {sensorIds.map((sensorId) => {
-          const t = telemetryBySensor[sensorId];
+          const live = telemetryBySensor[sensorId];
+          const api = apiSensors.find((s) => s.sensorId === sensorId);
+          // Prefer live data; fall back to API averages
+          const t = live || null;
+          const avgTemp = api?.avgTemperature ?? api?.averages?.temperature;
+          const avgPsi  = api?.avgPressure ?? api?.averages?.pressure;
+          const avgHum  = api?.avgHumidity ?? api?.averages?.humidity;
+          const avgRpm  = api?.avgRpm ?? api?.averages?.rpm;
+
           return (
             <div key={sensorId} style={{
               padding: "10px 14px", borderRadius: 10,
@@ -299,21 +271,24 @@ function SensorOverviewPanel({ telemetryBySensor, sensorIds }) {
                   {t ? "● LIVE" : "○ WAITING"}
                 </span>
               </div>
-              {t ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                  {[
-                    { icon: "🌡️", label: "Temp", val: t.temperature, unit: "°C" },
-                    { icon: "◉",  label: "Pressure", val: t.pressure, unit: " PSI" },
-                    { icon: "💧", label: "Humidity", val: t.humidity, unit: "%" },
-                    { icon: "⚙️", label: "RPM", val: t.rpm, unit: "" },
-                  ].map(({ icon, label, val, unit }) => (
-                    <div key={label} style={{ fontSize: 11, color: "#64748b" }}>
-                      {icon} <strong style={{ color: "#172033" }}>{val != null ? val : "–"}{unit}</strong> {label}
-                    </div>
-                  ))}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {[
+                  { icon: "🌡️", label: "Temp",     val: t?.temperature ?? avgTemp, unit: "°C" },
+                  { icon: "◉",  label: "Pressure", val: t?.pressure    ?? avgPsi,  unit: " PSI" },
+                  { icon: "💧", label: "Humidity", val: t?.humidity    ?? avgHum,  unit: "%" },
+                  { icon: "⚙️", label: "RPM",      val: t?.rpm         ?? avgRpm,  unit: "" },
+                ].map(({ icon, label, val, unit }) => (
+                  <div key={label} style={{ fontSize: 11, color: "#64748b" }}>
+                    {icon} <strong style={{ color: "#172033" }}>
+                      {val != null ? (typeof val === "number" ? val.toFixed(1) : val) : "–"}{unit}
+                    </strong> {label}
+                  </div>
+                ))}
+              </div>
+              {api?.totalReadings != null && (
+                <div style={{ marginTop: 6, fontSize: 10, color: "#94a3b8" }}>
+                  {api.totalReadings.toLocaleString()} readings recorded
                 </div>
-              ) : (
-                <p style={{ margin: 0, fontSize: 11, color: "#94a3b8" }}>Waiting for telemetry...</p>
               )}
             </div>
           );
@@ -334,47 +309,183 @@ export default function Analytics() {
     connectionStatus,
   } = useTelemetry();
 
-  // Step 2: Metric selector state (default 'temperature')
+  // Metric selector state (default 'temperature')
   const [selectedMetric, setSelectedMetric] = useState("temperature");
 
-  // Step 3: Sensor filter state
+  // Sensor filter state
   const [sensorFilter, setSensorFilter] = useState("All");
 
-  // Step 4: Time range state
+  // Time range state
   const [timeRange, setTimeRange] = useState("24h");
 
-  // ── Filter historical telemetry by time range and sensor ───────────────────
+  // Backend analytics data
+  const [apiTelemetry, setApiTelemetry]       = useState([]);
+  const [apiAlertStats, setApiAlertStats]     = useState({ total: 0, high: 0, medium: 0, low: 0, critical: 0 });
+  const [apiFrequency, setApiFrequency]       = useState([]);
+  const [apiSensors, setApiSensors]           = useState([]);
+  const [loadingTelemetry, setLoadingTelemetry] = useState(false);
+  const [loadingAlertData, setLoadingAlertData] = useState(false);
+  const [loadingApiSensors, setLoadingApiSensors] = useState(false);
+  const [totalAlertsCount, setTotalAlertsCount] = useState(0);
+
+  // Fetch historical telemetry from backend when time range / sensor changes
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchTelemetry() {
+      setLoadingTelemetry(true);
+      try {
+        const params = { timeRange, limit: 500 };
+        if (sensorFilter !== "All") params.sensorId = sensorFilter;
+        const res = await getAnalyticsTelemetry(params);
+        if (!cancelled) {
+          const data = res.data?.data ?? [];
+          const formatted = data.map((item) => ({
+            ...item,
+            time: item.timestamp
+              ? new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+              : "",
+          }));
+          setApiTelemetry(formatted);
+        }
+      } catch {
+        // silently fall back to live WebSocket data
+      } finally {
+        if (!cancelled) setLoadingTelemetry(false);
+      }
+    }
+    fetchTelemetry();
+    return () => { cancelled = true; };
+  }, [sensorFilter, timeRange]);
+
+  // Fetch alert analytics (stats + frequency)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchAlertData() {
+      setLoadingAlertData(true);
+      try {
+        const params = { days: timeRange === "30d" ? 30 : timeRange === "7d" ? 7 : 1 };
+        if (sensorFilter !== "All") params.sensorId = sensorFilter;
+        const res = await getAnalyticsAlerts(params);
+        if (!cancelled) {
+          const d = res.data;
+          setApiAlertStats({
+            total:    d.total    ?? d.stats?.total    ?? 0,
+            high:     d.high     ?? d.stats?.high     ?? 0,
+            medium:   d.medium   ?? d.stats?.medium   ?? 0,
+            low:      d.low      ?? d.stats?.low      ?? 0,
+            critical: d.critical ?? d.stats?.critical ?? 0,
+          });
+          setTotalAlertsCount(d.total ?? d.stats?.total ?? 0);
+          // Frequency chart
+          const freq = d.frequencyOverTime ?? d.frequency ?? [];
+          setApiFrequency(freq.map((b) => ({
+            label:  b.label  ?? b.date ?? b._id ?? "",
+            high:   b.high   ?? 0,
+            medium: b.medium ?? 0,
+            low:    b.low    ?? 0,
+          })));
+        }
+      } catch {
+        // fall back to alerts from AlertContext
+      } finally {
+        if (!cancelled) setLoadingAlertData(false);
+      }
+    }
+    fetchAlertData();
+  }, [sensorFilter, timeRange]);
+
+  // Fetch sensor fleet averages
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchSensors() {
+      setLoadingApiSensors(true);
+      try {
+        const res = await getAnalyticsSensors();
+        if (!cancelled) {
+          setApiSensors(res.data?.sensors ?? []);
+        }
+      } catch { /* non-critical */ } finally {
+        if (!cancelled) setLoadingApiSensors(false);
+      }
+    }
+    fetchSensors();
+  }, []);
+
+  // Merge: prefer backend historical data for longer time ranges; live WebSocket for 1h
   const filteredHistory = useMemo(() => {
-    const range = TIME_RANGES.find((r) => r.value === timeRange);
-    const cutoff = Date.now() - (range?.ms ?? TIME_RANGES[1].ms);
+    // For 1h range, use live WebSocket buffer (most up-to-date)
+    if (timeRange === "1h" && Object.keys(historyBySensor).length > 0) {
+      const range = TIME_RANGES.find((r) => r.value === timeRange);
+      const cutoff = Date.now() - (range?.ms ?? 3600000);
 
-    const source = sensorFilter === "All"
-      ? Object.values(historyBySensor).flat()
-      : (historyBySensor[sensorFilter] || []);
+      const source = sensorFilter === "All"
+        ? Object.values(historyBySensor).flat()
+        : (historyBySensor[sensorFilter] || []);
 
-    // Sort ascending by timestamp for correct time-series chart rendering
-    const sorted = [...source].sort((a, b) =>
-      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
-    );
+      return [...source]
+        .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0))
+        .filter((p) => {
+          if (!p.timestamp) return true;
+          return new Date(p.timestamp).getTime() >= cutoff;
+        });
+    }
 
-    // Filter by timestamp range
-    return sorted.filter((p) => {
-      if (!p.timestamp) return true;
-      return new Date(p.timestamp).getTime() >= cutoff;
+    // For 24h / 7d / 30d — use backend API data
+    return apiTelemetry;
+  }, [historyBySensor, apiTelemetry, sensorFilter, timeRange]);
+
+  // Alert stats: use backend data if available, else compute from AlertContext
+  const alertStats = useMemo(() => {
+    if (apiAlertStats.total > 0 || loadingAlertData === false) {
+      return apiAlertStats;
+    }
+    // Fallback: compute from AlertContext
+    const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
+    return {
+      total:    filtered.length,
+      high:     filtered.filter((a) => ["HIGH", "CRITICAL"].includes((a.severity || "").toUpperCase())).length,
+      medium:   filtered.filter((a) => (a.severity || "").toUpperCase() === "MEDIUM").length,
+      low:      filtered.filter((a) => ["LOW", "INFO"].includes((a.severity || "").toUpperCase())).length,
+      critical: filtered.filter((a) => (a.severity || "").toUpperCase() === "CRITICAL").length,
+    };
+  }, [apiAlertStats, alerts, sensorFilter, loadingAlertData]);
+
+  // Frequency chart: use API data if available, else compute from AlertContext
+  const frequencyData = useMemo(() => {
+    if (apiFrequency.length > 0) return apiFrequency;
+    // Fallback: compute from AlertContext alerts
+    const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const buckets = {};
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
+      buckets[key] = { label: days[d.getDay()], high: 0, medium: 0, low: 0 };
+    }
+    filtered.forEach((alert) => {
+      const alertDate = new Date(alert.timestamp || alert.createdAt || Date.now());
+      if (isNaN(alertDate.getTime())) return;
+      const key = `${days[alertDate.getDay()]} ${alertDate.getDate()}/${alertDate.getMonth() + 1}`;
+      if (!buckets[key]) buckets[key] = { label: days[alertDate.getDay()], high: 0, medium: 0, low: 0 };
+      const sev = (alert.severity || "HIGH").toUpperCase();
+      if (sev === "HIGH" || sev === "CRITICAL") buckets[key].high += 1;
+      else if (sev === "MEDIUM") buckets[key].medium += 1;
+      else buckets[key].low += 1;
     });
-  }, [historyBySensor, sensorFilter, timeRange]);
+    return Object.values(buckets);
+  }, [apiFrequency, alerts, sensorFilter]);
 
   const sensorOptions = ["All", ...sensorIds];
   const hasData = filteredHistory.length > 0;
-  const isLoading = connectionStatus === "reconnecting" && filteredHistory.length === 0;
-
-  // Active single metric config if not "all"
+  const isLoading = loadingTelemetry && filteredHistory.length === 0;
   const currentMetricConfig = selectedMetric !== "all" ? METRIC_CONFIG[selectedMetric] : null;
 
   return (
     <div className="analytics-page">
 
-      {/* ── HEADER & CONTROLS (Steps 2, 3, 4) ── */}
+      {/* ── HEADER & CONTROLS ── */}
       <div className="analytics-header">
         <div>
           <span className="eyebrow">Telemetry & Alert Analytics</span>
@@ -386,10 +497,10 @@ export default function Analytics() {
           </p>
         </div>
 
-        {/* ── Filter Bar ── */}
+        {/* Filter Bar */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          
-          {/* Step 2: Metric Selector */}
+
+          {/* Metric Selector */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Metric:</label>
             <select
@@ -404,7 +515,7 @@ export default function Analytics() {
             </select>
           </div>
 
-          {/* Step 3: Sensor Selector */}
+          {/* Sensor Selector */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Sensor:</label>
             <select
@@ -419,7 +530,7 @@ export default function Analytics() {
             </select>
           </div>
 
-          {/* Step 4: Time Range Selector */}
+          {/* Time Range Selector */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Time Range:</label>
             <select
@@ -437,7 +548,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* ── Metric Tab Pills for Quick Switching (Step 2) ── */}
+      {/* ── Metric Tab Pills ── */}
       <div className="analytics-metric-tabs">
         {METRIC_OPTIONS.map((opt) => (
           <button
@@ -451,11 +562,13 @@ export default function Analytics() {
         ))}
       </div>
 
-      {/* ── Step 1 & 2: PRIMARY TELEMETRY TREND CHART ── */}
+      {/* ── PRIMARY TELEMETRY TREND CHART ── */}
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-header">
           <div>
-            <span className="eyebrow">Real-Time Telemetry Stream</span>
+            <span className="eyebrow">
+              {timeRange === "1h" ? "Real-Time Telemetry Stream" : "Historical Telemetry — " + TIME_RANGES.find(r => r.value === timeRange)?.label}
+            </span>
             <h2>
               {selectedMetric === "all"
                 ? "Combined Telemetry Trends (Temperature, Pressure, Humidity, RPM)"
@@ -464,14 +577,14 @@ export default function Analytics() {
             </h2>
           </div>
           <span className="updated-label">
-            {hasData ? `${filteredHistory.length} Data Points` : "Waiting for Telemetry"}
+            {isLoading ? "Loading..." : hasData ? `${filteredHistory.length} Data Points` : "Waiting for Telemetry"}
           </span>
         </div>
 
         {isLoading && (
           <div className="analytics-state-box">
             <div className="spinner" />
-            <span>Loading telemetry data...</span>
+            <span>Loading telemetry data from backend...</span>
           </div>
         )}
 
@@ -489,7 +602,6 @@ export default function Analytics() {
           <div className="chart-wrap" style={{ height: 320, width: "100%" }}>
             <ResponsiveContainer width="100%" height="100%">
               {selectedMetric === "all" ? (
-                // Combined multi-metric chart
                 <LineChart data={filteredHistory} margin={{ top: 12, right: 16, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
@@ -497,16 +609,15 @@ export default function Analytics() {
                   <Tooltip content={<TelemetryTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                   <Line type="monotone" dataKey="temperature" name="Temperature (°C)" stroke="#7c3aed" strokeWidth={3} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="pressure"    name="Pressure (PSI)"    stroke="#0ea5e9" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="pressure"    name="Pressure (PSI)"   stroke="#0ea5e9" strokeWidth={2} dot={false} connectNulls />
                   <Line type="monotone" dataKey="humidity"    name="Humidity (%)"     stroke="#14b8a6" strokeWidth={2} dot={false} connectNulls />
                   <Line type="monotone" dataKey="rpm"         name="RPM"              stroke="#f97316" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               ) : (
-                // Dedicated Single Metric Area/Line Chart with styled Gradient
                 <AreaChart data={filteredHistory} margin={{ top: 12, right: 16, left: -10, bottom: 0 }}>
                   <defs>
                     <linearGradient id={currentMetricConfig.gradientId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={currentMetricConfig.color} stopOpacity={0.3} />
+                      <stop offset="5%"  stopColor={currentMetricConfig.color} stopOpacity={0.3} />
                       <stop offset="95%" stopColor={currentMetricConfig.color} stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
@@ -538,36 +649,36 @@ export default function Analytics() {
         )}
       </div>
 
-      {/* ── BOTTOM GRID: Step 5 (Alert Stats), Step 6 (Alerts Over Time), and Sensor Overview ── */}
+      {/* ── BOTTOM GRID: Alert Stats, Alerts Over Time, Sensor Overview ── */}
       <div className="analytics-bottom-grid" style={{ gridTemplateColumns: "1fr 1.2fr 1fr" }}>
-        
-        {/* Step 5: Alert Statistics */}
+
+        {/* Alert Statistics */}
         {alertsError ? (
           <div className="analytics-state-box analytics-state-error">
             <span style={{ fontSize: 22 }}>⚠️</span>
             <strong>Unable to load alert statistics.</strong>
             <span style={{ fontSize: 12 }}>Please check backend connection.</span>
           </div>
-        ) : alertsLoading ? (
-          <div className="panel" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 220 }}>
-            <div className="spinner" />
-            <span style={{ color: "#64748b", fontSize: 13, marginLeft: 8 }}>Loading alerts...</span>
-          </div>
         ) : (
-          <AlertStatsPanel alerts={alerts} sensorFilter={sensorFilter} />
+          <AlertStatsPanel alertStats={alertStats} loading={alertsLoading || loadingAlertData} />
         )}
 
-        {/* Step 6: Alerts Over Time Frequency Chart */}
-        <AlertsOverTimePanel alerts={alerts} sensorFilter={sensorFilter} />
+        {/* Alerts Over Time */}
+        <AlertsOverTimePanel
+          frequencyData={frequencyData}
+          totalAlerts={totalAlertsCount || alerts.length}
+          loading={loadingAlertData}
+        />
 
-        {/* Fleet Sensor Overview */}
+        {/* Sensor Fleet Overview */}
         <SensorOverviewPanel
           telemetryBySensor={telemetryBySensor}
           sensorIds={sensorIds}
+          apiSensors={apiSensors}
+          loadingApiSensors={loadingApiSensors}
         />
       </div>
 
     </div>
   );
 }
-

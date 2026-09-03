@@ -142,9 +142,10 @@ export default function Settings() {
     }
   }, [sensorIds, defaultSensor]);
 
-  // Step 10 — Save handler (persists to backend and local storage cache)
+  // Step 10 — Save handler (persists to backend, shows proper error state on failure)
   const handleSave = async () => {
     setSaveStatus("saving");
+    // Always write to localStorage first for offline resilience
     try {
       localStorage.setItem("nx_settings", JSON.stringify({
         alertNotifications,
@@ -152,20 +153,21 @@ export default function Settings() {
         defaultSensor,
         telemetryInterval,
       }));
+    } catch { /* storage unavailable */ }
 
+    try {
       await updateSettingsRequest({
         alertNotifications,
         highSeverityOnly,
         defaultSensor,
         telemetryInterval,
       });
-
       setSaveStatus("success");
-      setTimeout(() => setSaveStatus(null), 3000);
     } catch {
-      // If offline or network issue, fallback to successful local save
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus(null), 3000);
+      // Backend unavailable — saved to localStorage, show partial success
+      setSaveStatus("offline");
+    } finally {
+      setTimeout(() => setSaveStatus(null), 3500);
     }
   };
 
@@ -310,12 +312,17 @@ export default function Settings() {
         <div className="settings-save-row">
           {saveStatus === "success" && (
             <span className="settings-save-feedback success">
-              ✓ Settings saved successfully
+              ✓ Settings saved to database
+            </span>
+          )}
+          {saveStatus === "offline" && (
+            <span className="settings-save-feedback success">
+              ✓ Settings saved locally (backend offline)
             </span>
           )}
           {saveStatus === "error" && (
             <span className="settings-save-feedback error">
-              Unable to save settings. Please try again.
+              ✗ Unable to save settings. Please try again.
             </span>
           )}
 
