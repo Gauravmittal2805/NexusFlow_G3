@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Sensor = require('../models/Sensor');
 
 // @desc    Get all sensors
@@ -69,7 +70,7 @@ const deleteSensor = async (req, res) => {
 
     // Try deleting by sensorId first, then by mongoose Object ID
     let sensor = await Sensor.findOne({ sensorId: id });
-    if (!sensor) {
+    if (!sensor && mongoose.Types.ObjectId.isValid(id)) {
       sensor = await Sensor.findById(id);
     }
 
