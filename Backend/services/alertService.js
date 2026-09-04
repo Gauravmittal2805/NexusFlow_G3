@@ -106,7 +106,11 @@ async function processRuleTrigger(rule, telemetry) {
   });
 }
 
-async function getAllAlerts()        { return Alert.find().sort({ timestamp: -1 }); }
+async function getAllAlerts(filter = {}, limit = 0) {
+  let query = Alert.find(filter).sort({ timestamp: -1 });
+  if (limit > 0) query = query.limit(limit);
+  return query;
+}
 async function getAlertById(id)     { return Alert.findById(id); }
 async function markAlertAsRead(id)  { return Alert.findByIdAndUpdate(id, { status: 'read' }, { returnDocument: 'after' }); }
 

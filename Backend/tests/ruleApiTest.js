@@ -34,15 +34,15 @@ async function runTests() {
       password: 'password123',
       role: 'admin',
     });
-    const tokenA = jwt.sign({ userId: userA._id.toString() }, JWT_SECRET);
+    const tokenA = jwt.sign({ userId: userA._id.toString(), role: userA.role }, JWT_SECRET);
 
     const userB = await User.create({
       name: 'User B',
       email: `test_rule_b_${Date.now()}@example.com`,
       password: 'password123',
-      role: 'admin',
+      role: 'operator',
     });
-    const tokenB = jwt.sign({ userId: userB._id.toString() }, JWT_SECRET);
+    const tokenB = jwt.sign({ userId: userB._id.toString(), role: userB.role }, JWT_SECRET);
 
     // Helper for making requests
     const makeRequest = (server, method, path, token, body = null) => {

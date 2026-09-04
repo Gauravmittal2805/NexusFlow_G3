@@ -5,7 +5,7 @@ const { pushTelemetry } = require('../streams/telemetryStream');
 
 // ─── Simulator config ────────────────────────────────────────────────────────
 
-const INTERVAL_MS = 16000; // emit every 2 seconds
+const INTERVAL_MS = parseInt(process.env.SIMULATOR_INTERVAL_MS, 10) || 3000; // emit every 3 seconds
 
 /**
  * Each turbine has its own live state that drifts continuously.

@@ -21,9 +21,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-export const getTelemetry = () => api.get("/telemetry");
-export const getSensorTelemetry = (sensorId) =>
-  api.get(`/telemetry/${sensorId}`);
+export const getTelemetry = (params) => api.get("/api/telemetry", { params });
+export const getSensorTelemetry = (sensorId, params) =>
+  api.get(`/api/telemetry/${sensorId}`, { params });
+export const getTelemetrySummary = (params) =>
+  api.get("/api/telemetry/summary", { params });
 
 export const registerRequest = (payload) =>
   api.post("/api/auth/register", payload);
@@ -67,5 +69,31 @@ export const getAlertByIdRequest = (id) =>
 
 export const markAlertAsReadRequest = (id) =>
   api.patch(`/api/alerts/${id}/read`);
+
+export const getAlertStatsRequest = () =>
+  api.get("/api/alerts/stats");
+
+// Analytics APIs (Member 4 Integration)
+export const getAnalyticsOverview = () =>
+  api.get("/api/analytics/overview");
+
+export const getAnalyticsSummary = () =>
+  api.get("/api/analytics/summary");
+
+export const getAnalyticsTelemetry = (params) =>
+  api.get("/api/analytics/telemetry", { params });
+
+export const getAnalyticsAlerts = (params) =>
+  api.get("/api/analytics/alerts", { params });
+
+export const getAnalyticsSensors = () =>
+  api.get("/api/analytics/sensors");
+
+// Settings APIs
+export const getSettingsRequest = () =>
+  api.get("/api/settings");
+
+export const updateSettingsRequest = (payload) =>
+  api.put("/api/settings", payload);
 
 export default api;

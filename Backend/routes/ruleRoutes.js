@@ -43,7 +43,7 @@ router.patch('/:id/status', requireRole('admin', 'operator'), updateRuleStatus);
 // PUT /api/rules/:id - Update rule (admin, operator)
 router.put('/:id', requireRole('admin', 'operator'), updateRule);
 
-// DELETE /api/rules/:id - Delete rule (admin, operator)
-router.delete('/:id', requireRole('admin', 'operator'), deleteRule);
+// DELETE /api/rules/:id - Delete rule (admin only)
+router.delete('/:id', requireRole('admin'), deleteRule);
 
 module.exports = router;
