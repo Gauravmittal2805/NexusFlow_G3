@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day 2 - Telemetry Real-Time Test</title>
+    <!-- Use Socket.IO CDN for the test client -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: monospace; background: #121212; color: #00ff00; padding: 20px; }
+        .warning { color: #ff3333; font-weight: bold; }
+        .normal { color: #00ff00; }
+        .card { background: #1e1e1e; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #333; }
+        ul { list-style-type: none; padding: 0; }
+        li { padding: 8px; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+    <h1>Day 2 - WebSocket Real-Time Telemetry Client</h1>
+    <p>Waiting for 'telemetry:update' event from http://localhost:5005...</p>
+    
+    <div class="card">
+        <ul id="telemetry-list"></ul>
+    </div>
+
+    <script>
+        // Connect to the backend server running on port 5005
+        const socket = io('http://localhost:5005');
+        const list = document.getElementById('telemetry-list');
+
+        socket.on('connect', () => {
+            console.log('Connected to backend WebSocket!');
+        });
+
+        // Listen for the contract event defined for Member 3
+        socket.on('telemetry:update', (data) => {
+            const li = document.createElement('li');
+            const statusClass = data.status === 'WARNING' ? 'warning' : 'normal';
+            
+            li.innerHTML = `
+                [${new Date(data.timestamp).toLocaleTimeString()}] 
+                <strong>${data.sensorId}</strong> | 
+                Temp: <span class="${statusClass}">${data.temperature}°F</span> | 
+                Pressure: ${data.pressure} | 
+                RPM: ${data.rpm} | 
+                Status: <span class="${statusClass}">${data.status}</span>
+            `;
+            
+            // Insert at the top
+            list.insertBefore(li, list.firstChild);
+            
+            // Keep only latest 15 to avoid clutter
+            if (list.children.length > 15) {
+                list.removeChild(list.lastChild);
+            }
+        });
+    </script>
+</body>
+</html>
