@@ -95,7 +95,9 @@ async function run() {
       { source: 'cn1', target: 'an1' },
     ],
   });
-  console.log(`📋 Rule created: "${testRule.name}" (temperature > 80)\n`);
+  const { activateAll } = require('../engine/ruleRuntime');
+  await activateAll();
+  console.log(`📋 Rule created & activated: "${testRule.name}" (temperature > 80)\n`);
 
   // Spin up HTTP + Socket.IO test server
   const server = http.createServer(app);
