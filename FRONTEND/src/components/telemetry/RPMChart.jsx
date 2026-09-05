@@ -40,9 +40,9 @@ export default function RPMChart({ data }) {
   const maxRPM = rpmValues.length ? Math.ceil(Math.max(...rpmValues) * 1.05) : 3000;
 
   return (
-    <div className="chart-wrap" style={{ width: "100%", height: "100%", minHeight: "220px" }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, left: -10, bottom: 0 }}>
+    <div className="chart-wrap" style={{ width: "100%", height: "250px" }}>
+      <ResponsiveContainer width="100%" height={250}>
+        <LineChart data={data} margin={{ top: 12, right: 16, left: 10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
           <YAxis

@@ -6,6 +6,9 @@ const sensorRoutes = require('./routes/sensorRoutes');
 const userRoutes = require('./routes/userRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const telemetryRoutes = require('./routes/telemetryRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 const app = express();
 
 app.use(cors({
@@ -36,6 +39,9 @@ app.use('/api/sensors', sensorRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/webhook', webhookRoutes);
+app.use('/api/telemetry', telemetryRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // REST telemetry endpoint (returns latest mock data)
 app.get('/telemetry', (req, res) => {
