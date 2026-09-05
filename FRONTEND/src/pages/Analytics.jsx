@@ -581,6 +581,24 @@ export default function Analytics() {
           </span>
         </div>
 
+        {dataError && (
+          <div style={{
+            backgroundColor: "#fef3c7",
+            color: "#b45309",
+            border: "1px solid #fde68a",
+            padding: "10px 14px",
+            borderRadius: "8px",
+            margin: "0 0 12px 0",
+            fontSize: "12px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            <span>⚠️</span>
+            <span>{dataError}</span>
+          </div>
+        )}
+
         {isLoading && (
           <div className="analytics-state-box">
             <div className="spinner" />

@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers, updateUserRole, updateUserStatus } = require('../controllers/userController');
+const { getUsers, updateUserRole, updateUserStatus, updateUserPreferences } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleMiddleware');
 
-// Protect all routes - Admin only
+// User preferences route (any authenticated user)
+router.put('/preferences', protect, updateUserPreferences);
+
+// Admin-only routes
 router.use(protect);
 router.use(requireRole('admin'));
 

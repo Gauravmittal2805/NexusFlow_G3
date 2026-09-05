@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
+import api from "../services/api";
 import { getSettingsRequest, updateSettingsRequest } from "../services/api";
 
 // ── Simple toggle component ────────────────────────────────────────────────────

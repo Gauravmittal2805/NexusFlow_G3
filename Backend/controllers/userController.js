@@ -146,8 +146,73 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// @desc    Update user preferences (notification settings, monitoring defaults)
+// @route   PUT /api/users/preferences
+// @access  Private (Authenticated user)
+const updateUserPreferences = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    const {
+      alertNotifications,
+      highSeverityOnly,
+      defaultSensor,
+      telemetryInterval
+    } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Initialize preferences object if it doesn't exist
+    if (!user.preferences) {
+      user.preferences = {};
+    }
+
+    // Update preferences
+    if (typeof alertNotifications === 'boolean') {
+      user.preferences.alertNotifications = alertNotifications;
+    }
+    if (typeof highSeverityOnly === 'boolean') {
+      user.preferences.highSeverityOnly = highSeverityOnly;
+    }
+    if (defaultSensor) {
+      user.preferences.defaultSensor = defaultSensor;
+    }
+    if (telemetryInterval) {
+      user.preferences.telemetryInterval = telemetryInterval;
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'User preferences updated successfully',
+      preferences: user.preferences
+    });
+  } catch (error) {
+    console.error('Error updating user preferences:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 module.exports = {
   getUsers,
   updateUserRole,
-  updateUserStatus
+  updateUserStatus,
+  updateUserPreferences
 };

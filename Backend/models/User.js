@@ -30,10 +30,30 @@ const userSchema = new mongoose.Schema({
     default: "active"
   },
   preferences: {
-    alertNotifications: { type: Boolean, default: true },
-    highSeverityOnly:   { type: Boolean, default: false },
-    defaultSensor:      { type: String,  default: "TURBINE-001" },
-    telemetryInterval:  { type: String,  default: "5s" }
+    type: {
+      alertNotifications: {
+        type: Boolean,
+        default: true
+      },
+      highSeverityOnly: {
+        type: Boolean,
+        default: false
+      },
+      defaultSensor: {
+        type: String,
+        default: 'TURBINE-001'
+      },
+      telemetryInterval: {
+        type: String,
+        default: '5s'
+      }
+    },
+    default: () => ({
+      alertNotifications: true,
+      highSeverityOnly: false,
+      defaultSensor: 'TURBINE-001',
+      telemetryInterval: '5s'
+    })
   },
   createdAt: {
     type: Date,
