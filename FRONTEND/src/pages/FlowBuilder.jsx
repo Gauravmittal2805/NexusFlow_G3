@@ -552,6 +552,11 @@ function FlowCanvas({
       status: isRuleActive ? "RUNNING" : "INACTIVE"
     });
 
+    console.log("=========================================");
+    console.log("🚀 SERIALIZED RULE JSON PAYLOAD (POST /api/rules)");
+    console.log("=========================================");
+    console.log(JSON.stringify(cleanPayload, null, 2));
+
     try {
       let savedRuleId = activeRuleId;
       let backendSaved = false;
@@ -1206,7 +1211,9 @@ function FlowCanvas({
                 isRuleActive={isRuleActive}
                 ruleStatus={ruleStatus}
                 compilationStatus={compilationFeedback}
-                onTriggerUpdate={() => {}}
+                onTriggerUpdate={(trigger) => {
+                  console.log("⚡ Live trigger update in FlowBuilder:", trigger);
+                }}
               />
             ) : (
               <SavedRulesPanel

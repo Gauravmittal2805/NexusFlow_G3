@@ -6,7 +6,6 @@ const app           = require('./app');
 const connectDB     = require('./config/db');
 const { initWebSocket }   = require('./websocket/telemetrySocket');
 const { startSimulator, stopSimulator } = require('./services/telemetrySimulator');
-const { seedSensors }       = require('./utils/seedSensors');
 
 // ── Single authoritative rule engine ─────────────────────────────────────────
 // ruleRuntime is the only engine that compiles rules and subscribes pipelines
@@ -42,9 +41,6 @@ server.listen(PORT, async () => {
 
     // Connect to MongoDB first — the simulator needs it to persist readings
     await connectDB();
-
-    // Ensure default turbine fleet sensors exist in database
-    await seedSensors();
 
     // Start the single authoritative rule engine — compile all active rules
     // into RxJS pipelines subscribed to telemetry$

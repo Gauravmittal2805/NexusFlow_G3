@@ -38,15 +38,12 @@ const { push: pushTelemetry } = require('../compiler/telemetryStream');
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/NexusFlow';
 
-let testAuthToken = null;
-
 // Helper: HTTP Request
 function makeRequest(server, method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const postData = body ? JSON.stringify(body) : null;
     const reqHeaders = {
       'Content-Type': 'application/json',
-      ...(testAuthToken ? { Authorization: `Bearer ${testAuthToken}` } : {}),
       ...headers,
     };
     if (postData) {
@@ -151,10 +148,6 @@ async function runDay2Tests() {
     password: 'password123',
     role: 'admin',
   });
-  testAuthToken = jwt.sign(
-    { userId: testUser._id.toString(), role: testUser.role },
-    process.env.JWT_SECRET || 'fallback_secret'
-  );
 
   try {
     // ─────────────────────────────────────────────────────────────────

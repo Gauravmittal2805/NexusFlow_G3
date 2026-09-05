@@ -29,7 +29,6 @@ import {
   socket,
   subscribeToTelemetry,
 } from "../services/socket";
-import { getTelemetry } from "../services/api";
 
 const TelemetryContext = createContext(null);
 
@@ -120,65 +119,6 @@ export function TelemetryProvider({ children }) {
     });
   };
 
-  // Hydrate initial real telemetry history from backend MongoDB (GET /api/telemetry)
-  useEffect(() => {
-    let isMounted = true;
-    async function loadTelemetryHistory() {
-      try {
-        const response = await getTelemetry({ limit: 150, sort: "asc" });
-        const data = response.data?.data || response.data || [];
-        if (!isMounted || !Array.isArray(data) || data.length === 0) return;
-
-        const groupedHistory = {};
-        const latestBySensor = {};
-
-        data.forEach((item) => {
-          if (!item || !item.sensorId) return;
-          const sensorId = String(item.sensorId).trim();
-          const formattedTime = formatChartTime(item.timestamp);
-
-          const point = {
-            timestamp: item.timestamp,
-            time: formattedTime,
-            temperature: typeof item.temperature === "number" ? item.temperature : (Number(item.temperature) || null),
-            pressure: typeof item.pressure === "number" ? item.pressure : (Number(item.pressure) || null),
-            rpm: typeof item.rpm === "number" ? item.rpm : (Number(item.rpm) || null),
-            humidity: typeof item.humidity === "number" ? item.humidity : (Number(item.humidity) || null),
-          };
-
-          if (!groupedHistory[sensorId]) groupedHistory[sensorId] = [];
-          groupedHistory[sensorId].push(point);
-
-          latestBySensor[sensorId] = {
-            ...item,
-            sensorId,
-            formattedTime,
-          };
-        });
-
-        setHistoryBySensor((prev) => {
-          const merged = { ...prev };
-          Object.keys(groupedHistory).forEach((sid) => {
-            merged[sid] = groupedHistory[sid].slice(-MAX_HISTORY_POINTS);
-          });
-          return merged;
-        });
-
-        setTelemetryBySensor((prev) => ({
-          ...prev,
-          ...latestBySensor,
-        }));
-      } catch (err) {
-        console.warn("[TelemetryContext] Could not load initial telemetry from MongoDB API:", err.message);
-      }
-    }
-
-    loadTelemetryHistory();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   /*
    * Step 1, 3, 4, 12: Process incoming live telemetry packet
    *
@@ -242,11 +182,13 @@ export function TelemetryProvider({ children }) {
     connectSocket();
 
     const handleConnect = () => {
+      console.log("[TelemetryContext] 🔌 Socket.IO connected to telemetry stream");
       setConnectionStatus("connected");
       setConnectionError("");
     };
 
-    const handleDisconnect = () => {
+    const handleDisconnect = (reason) => {
+      console.warn("[TelemetryContext] ⚠️ Socket.IO disconnected:", reason);
       setConnectionStatus("disconnected");
     };
 

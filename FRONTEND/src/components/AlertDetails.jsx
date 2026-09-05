@@ -117,6 +117,7 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
           <span className="prop-label">Rule / Condition</span>
           <div className="prop-rule-row">
             <span className="prop-value">{alert.ruleName || "Rule Condition"}</span>
+            {/* Step 9: Link Alert to Rule */}
             {alert.ruleId && (
               <button
                 type="button"
@@ -134,15 +135,6 @@ export default function AlertDetails({ alert, onClose, onMarkAsRead }) {
           <span className="prop-label">Message / Telemetry Context</span>
           <p className="prop-message">{alert.message || "Condition threshold was triggered."}</p>
         </div>
-
-        {alert.value !== undefined && alert.value !== null && (
-          <div className="details-prop-box">
-            <span className="prop-label">Triggered Value</span>
-            <strong className="prop-value" style={{ color: "#dc2626" }}>
-              {typeof alert.value === "number" ? alert.value.toFixed(2) : alert.value}
-            </strong>
-          </div>
-        )}
 
         <div className="details-prop-box">
           <span className="prop-label">Dispatched Action</span>

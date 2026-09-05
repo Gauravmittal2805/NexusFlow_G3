@@ -116,15 +116,19 @@ export function AlertProvider({ children }) {
   // Step 2, 3, 8, 10, 11: Real-time Socket.IO trigger and alert listeners
   useEffect(() => {
     const handleConnect = () => {
+      console.log("[AlertContext] 🔌 Socket.IO connected — syncing alerts");
       setSocketStatus("connected");
+      // Step 11: Resync alerts on reconnect to catch any missed persistent events
       refreshAlerts();
     };
 
     const handleDisconnect = () => {
+      console.warn("[AlertContext] ⚠️ Socket.IO disconnected — live connection lost");
       setSocketStatus("disconnected");
     };
 
-    const handleConnectError = () => {
+    const handleConnectError = (err) => {
+      console.error("[AlertContext] Socket.IO connection error:", err.message);
       setSocketStatus("error");
     };
 
@@ -165,6 +169,7 @@ export function AlertProvider({ children }) {
     // Step 2 & 3: Process incoming "rule:triggered" event (from Member 2 engine)
     const handleRuleTriggered = (eventData) => {
       if (!eventData || !eventData.ruleId) return;
+      console.log("[AlertContext] ⚡ rule:triggered received:", eventData);
 
       const normalized = normalizeAlert(eventData);
 
@@ -195,6 +200,7 @@ export function AlertProvider({ children }) {
     // Step 2 & 3: Process incoming "alert:new" event (persisted Alert document)
     const handleAlertNew = (incomingAlert) => {
       if (!incomingAlert) return;
+      console.log("[AlertContext] 🔔 alert:new received:", incomingAlert);
 
       const normalized = normalizeAlert(incomingAlert);
 

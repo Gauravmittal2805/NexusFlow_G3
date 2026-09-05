@@ -22,9 +22,7 @@ import SensorCard from "../components/SensorCard";
 import TelemetryChart from "../components/TelemetryChart";
 import RPMChart from "../components/RPMChart";
 import RecentAlerts from "../components/RecentAlerts";
-import { getRuntimePipelineStatusRequest, getAlertStatsRequest } from "../services/api";
-
-const getRuntimePipelineStatus = getRuntimePipelineStatusRequest;
+import { getRuntimePipelineStatus } from "../services/ruleService";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -44,8 +42,9 @@ export default function Dashboard() {
   } = useTelemetry();
 
   // ── Active Rule Pipelines — live count from ruleRuntime registry ──────────
+  // Fetched from GET /api/rules/runtime/status on mount and every 30 s.
+  // Falls back to "–" while loading so the card never shows a stale number.
   const [activePipelines, setActivePipelines] = useState(null);
-  const [totalAlerts, setTotalAlerts]         = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,25 +56,12 @@ export default function Dashboard() {
           setActivePipelines(data.running ?? 0);
         }
       } catch {
-        // keep previous value if backend unreachable
+        // backend may be unreachable during initial load — keep previous value
       }
     };
 
-    const fetchAlertStats = async () => {
-      try {
-        const { data } = await getAlertStatsRequest();
-        if (!cancelled && data?.stats) {
-          setTotalAlerts(data.stats.total ?? 0);
-        }
-      } catch { /* non-critical */ }
-    };
-
     fetchPipelineCount();
-    fetchAlertStats();
-    const interval = setInterval(() => {
-      fetchPipelineCount();
-      fetchAlertStats();
-    }, 30_000);
+    const interval = setInterval(fetchPipelineCount, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
@@ -203,11 +189,11 @@ export default function Dashboard() {
         <div className="stat-card">
           <span className="stat-icon alert-icon">!</span>
           <div>
-            <small>Total Alerts</small>
-            <strong>{totalAlerts === null ? "–" : totalAlerts.toString().padStart(2, "0")}</strong>
+            <small>Unread Alerts</small>
+            <strong>{unreadCount.toString().padStart(2, "0")}</strong>
           </div>
           <span className={`stat-trend ${unreadCount > 0 ? "warning-text" : ""}`}>
-            {totalAlerts === null ? "Loading..." : unreadCount > 0 ? `${unreadCount} Unread` : "All reviewed"}
+            {unreadCount > 0 ? `${unreadCount} Needs review` : "Zero unread"}
           </span>
         </div>
       </section>

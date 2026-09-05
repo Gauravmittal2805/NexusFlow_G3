@@ -12,7 +12,9 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
 import api from "../services/api";
+=========
 import { getSettingsRequest, updateSettingsRequest } from "../services/api";
+>>>>>>>>> Temporary merge branch 2
 
 // ── Simple toggle component ────────────────────────────────────────────────────
 
@@ -143,16 +145,43 @@ export default function Settings() {
     }
   }, [sensorIds, defaultSensor]);
 
-  // Step 10 — Save handler (persists to backend, shows proper error state on failure)
+  // Step 10 — Save handler
   const handleSave = async () => {
     setSaveStatus("saving");
-    // Always write to localStorage first for offline resilience
     try {
+<<<<<<<<< Temporary merge branch 1
+      // Prepare settings payload
+      const settingsPayload = {
+=========
       localStorage.setItem("nx_settings", JSON.stringify({
+>>>>>>>>> Temporary merge branch 2
         alertNotifications,
         highSeverityOnly,
         defaultSensor,
         telemetryInterval,
+<<<<<<<<< Temporary merge branch 1
+      };
+
+      // Persist to localStorage so the preference survives a refresh
+      localStorage.setItem("nx_settings", JSON.stringify(settingsPayload));
+
+      // Try to save to backend (if user preferences endpoint exists)
+      try {
+        await api.put('/api/users/preferences', settingsPayload);
+      } catch (apiError) {
+        console.warn('[Settings] Backend preferences API not available, using localStorage only:', apiError.message);
+      }
+
+      // Simulate short async operation for UI feedback
+      await new Promise((r) => setTimeout(r, 600));
+      
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus(null), 3000);
+    } catch (error) {
+      console.error('[Settings] Error saving settings:', error);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus(null), 3000);
+=========
       }));
     } catch { /* storage unavailable */ }
 
@@ -169,38 +198,19 @@ export default function Settings() {
       setSaveStatus("offline");
     } finally {
       setTimeout(() => setSaveStatus(null), 3500);
+>>>>>>>>> Temporary merge branch 2
     }
   };
 
-  // Load persisted preferences from backend API, fallback to local storage
+  // Load persisted preferences on mount
   useEffect(() => {
-    let isMounted = true;
-    async function loadSettings() {
-      try {
-        const res = await getSettingsRequest();
-        if (isMounted && res.data?.preferences) {
-          const p = res.data.preferences;
-          if (typeof p.alertNotifications === "boolean") setAlertNotifications(p.alertNotifications);
-          if (typeof p.highSeverityOnly === "boolean")   setHighSeverityOnly(p.highSeverityOnly);
-          if (p.defaultSensor)                           setDefaultSensor(p.defaultSensor);
-          if (p.telemetryInterval)                       setTelemetryInterval(p.telemetryInterval);
-          return;
-        }
-      } catch {
-        // Fallback to localStorage
-      }
-
-      try {
-        const saved = JSON.parse(localStorage.getItem("nx_settings") || "{}");
-        if (typeof saved.alertNotifications === "boolean") setAlertNotifications(saved.alertNotifications);
-        if (typeof saved.highSeverityOnly   === "boolean") setHighSeverityOnly(saved.highSeverityOnly);
-        if (saved.defaultSensor)                           setDefaultSensor(saved.defaultSensor);
-        if (saved.telemetryInterval)                       setTelemetryInterval(saved.telemetryInterval);
-      } catch { /* ignore */ }
-    }
-
-    loadSettings();
-    return () => { isMounted = false; };
+    try {
+      const saved = JSON.parse(localStorage.getItem("nx_settings") || "{}");
+      if (typeof saved.alertNotifications === "boolean") setAlertNotifications(saved.alertNotifications);
+      if (typeof saved.highSeverityOnly   === "boolean") setHighSeverityOnly(saved.highSeverityOnly);
+      if (saved.defaultSensor)                           setDefaultSensor(saved.defaultSensor);
+      if (saved.telemetryInterval)                       setTelemetryInterval(saved.telemetryInterval);
+    } catch { /* ignore */ }
   }, []);
 
   return (
@@ -313,17 +323,12 @@ export default function Settings() {
         <div className="settings-save-row">
           {saveStatus === "success" && (
             <span className="settings-save-feedback success">
-              ✓ Settings saved to database
-            </span>
-          )}
-          {saveStatus === "offline" && (
-            <span className="settings-save-feedback success">
-              ✓ Settings saved locally (backend offline)
+              ✓ Settings saved successfully
             </span>
           )}
           {saveStatus === "error" && (
             <span className="settings-save-feedback error">
-              ✗ Unable to save settings. Please try again.
+              Unable to save settings. Please try again.
             </span>
           )}
 
