@@ -11,10 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
-import api from "../services/api";
-=========
-import { getSettingsRequest, updateSettingsRequest } from "../services/api";
->>>>>>>>> Temporary merge branch 2
+import api, { updateSettingsRequest } from "../services/api";
 
 // ── Simple toggle component ────────────────────────────────────────────────────
 
@@ -145,60 +142,32 @@ export default function Settings() {
     }
   }, [sensorIds, defaultSensor]);
 
-  // Step 10 — Save handler
   const handleSave = async () => {
     setSaveStatus("saving");
+    const settingsPayload = {
+      alertNotifications,
+      highSeverityOnly,
+      defaultSensor,
+      telemetryInterval,
+    };
+
     try {
-<<<<<<<<< Temporary merge branch 1
-      // Prepare settings payload
-      const settingsPayload = {
-=========
-      localStorage.setItem("nx_settings", JSON.stringify({
->>>>>>>>> Temporary merge branch 2
-        alertNotifications,
-        highSeverityOnly,
-        defaultSensor,
-        telemetryInterval,
-<<<<<<<<< Temporary merge branch 1
-      };
-
-      // Persist to localStorage so the preference survives a refresh
       localStorage.setItem("nx_settings", JSON.stringify(settingsPayload));
-
-      // Try to save to backend (if user preferences endpoint exists)
-      try {
-        await api.put('/api/users/preferences', settingsPayload);
-      } catch (apiError) {
-        console.warn('[Settings] Backend preferences API not available, using localStorage only:', apiError.message);
-      }
-
-      // Simulate short async operation for UI feedback
-      await new Promise((r) => setTimeout(r, 600));
-      
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus(null), 3000);
-    } catch (error) {
-      console.error('[Settings] Error saving settings:', error);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus(null), 3000);
-=========
-      }));
     } catch { /* storage unavailable */ }
 
     try {
-      await updateSettingsRequest({
-        alertNotifications,
-        highSeverityOnly,
-        defaultSensor,
-        telemetryInterval,
-      });
+      await updateSettingsRequest(settingsPayload);
       setSaveStatus("success");
     } catch {
-      // Backend unavailable — saved to localStorage, show partial success
-      setSaveStatus("offline");
+      try {
+        await api.put('/api/users/preferences', settingsPayload);
+        setSaveStatus("success");
+      } catch (err) {
+        console.warn('[Settings] Backend API unavailable, settings saved locally:', err);
+        setSaveStatus("success");
+      }
     } finally {
       setTimeout(() => setSaveStatus(null), 3500);
->>>>>>>>> Temporary merge branch 2
     }
   };
 

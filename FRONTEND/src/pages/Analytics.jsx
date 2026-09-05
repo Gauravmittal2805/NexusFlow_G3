@@ -12,8 +12,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -28,19 +26,17 @@ import {
 import { useAlerts } from "../context/AlertContext";
 import { useTelemetry } from "../context/TelemetryContext";
 import {
-<<<<<<<<< Temporary merge branch 1
   fetchAllTelemetry,
   fetchSensorTelemetry,
   filterTelemetryByTimeRange,
   transformTelemetryForChart,
   groupTelemetrybySensor,
 } from "../services/telemetryService";
-=========
+import {
   getAnalyticsAlerts,
   getAnalyticsTelemetry,
   getAnalyticsSensors,
 } from "../services/api";
->>>>>>>>> Temporary merge branch 2
 
 // ── Time-range definitions (Step 4) ──────────────────────────────────────────
 
@@ -268,7 +264,7 @@ function AlertsOverTimePanel({ alerts, sensorFilter }) {
       </div>
 
       <div style={{ height: 210, width: "100%" }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={210}>
           <BarChart data={chartData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
@@ -357,100 +353,61 @@ export default function Analytics() {
   // Step 4: Time range state
   const [timeRange, setTimeRange] = useState("24h");
 
-<<<<<<<<< Temporary merge branch 1
-  // API data state
-  const [historicalData, setHistoricalData] = useState([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [dataError, setDataError] = useState(null);
-
-  // Fetch historical telemetry data from MongoDB API
-  useEffect(() => {
-    const loadHistoricalData = async () => {
-      setIsLoadingData(true);
-      setDataError(null);
-
-      try {
-        let data;
-        
-        // Fetch data based on sensor filter
-        if (sensorFilter === "All") {
-          data = await fetchAllTelemetry();
-        } else {
-          data = await fetchSensorTelemetry(sensorFilter);
-        }
-
-        // Transform data for charts
-        const transformed = transformTelemetryForChart(data);
-        
-        // Apply time range filter
-        const range = TIME_RANGES.find((r) => r.value === timeRange);
-        const filtered = filterTelemetryByTimeRange(transformed, range?.ms ?? TIME_RANGES[1].ms);
-
-        setHistoricalData(filtered);
-      } catch (error) {
-        console.error('[Analytics] Failed to load historical telemetry:', error);
-        setDataError('Unable to load historical data. Using live stream data.');
-        
-        // Fallback to context data
-        const source = sensorFilter === "All"
-          ? Object.values(historyBySensor).flat()
-          : (historyBySensor[sensorFilter] || []);
-        setHistoricalData(source);
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-
-    loadHistoricalData();
-  }, [sensorFilter, timeRange, historyBySensor]);
-
-  // ── Filter historical telemetry by time range and sensor ───────────────────
-  const filteredHistory = useMemo(() => {
-    // If we have API data, use it; otherwise fall back to context data
-    if (historicalData.length > 0) {
-      return historicalData;
-    }
-
-    // Fallback to WebSocket context data
-    const range = TIME_RANGES.find((r) => r.value === timeRange);
-    const cutoff = Date.now() - (range?.ms ?? TIME_RANGES[1].ms);
-=========
-  // Backend analytics data
-  const [apiTelemetry, setApiTelemetry]       = useState([]);
-  const [apiAlertStats, setApiAlertStats]     = useState({ total: 0, high: 0, medium: 0, low: 0, critical: 0 });
-  const [apiFrequency, setApiFrequency]       = useState([]);
-  const [apiSensors, setApiSensors]           = useState([]);
+  // Backend & Service API data
+  const [apiTelemetry, setApiTelemetry]         = useState([]);
+  const [apiAlertStats, setApiAlertStats]       = useState({ total: 0, high: 0, medium: 0, low: 0, critical: 0 });
+  const [apiFrequency, setApiFrequency]         = useState([]);
+  const [apiSensors, setApiSensors]             = useState([]);
   const [loadingTelemetry, setLoadingTelemetry] = useState(false);
   const [loadingAlertData, setLoadingAlertData] = useState(false);
   const [loadingApiSensors, setLoadingApiSensors] = useState(false);
-  const [totalAlertsCount, setTotalAlertsCount] = useState(0);
+  const [dataError, setDataError]               = useState(null);
 
-  // Fetch historical telemetry from backend when time range / sensor changes
+  // Fetch historical telemetry from backend or service when time range / sensor changes
   useEffect(() => {
     let cancelled = false;
-    async function fetchTelemetry() {
+    async function fetchTelemetryData() {
       setLoadingTelemetry(true);
+      setDataError(null);
       try {
         const params = { timeRange, limit: 500 };
         if (sensorFilter !== "All") params.sensorId = sensorFilter;
-        const res = await getAnalyticsTelemetry(params);
-        if (!cancelled) {
+
+        let formatted = [];
+        try {
+          const res = await getAnalyticsTelemetry(params);
           const data = res.data?.data ?? [];
-          const formatted = data.map((item) => ({
+          formatted = data.map((item) => ({
             ...item,
             time: item.timestamp
               ? new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
               : "",
           }));
+        } catch {
+          let rawData;
+          if (sensorFilter === "All") {
+            rawData = await fetchAllTelemetry();
+          } else {
+            rawData = await fetchSensorTelemetry(sensorFilter);
+          }
+          const transformed = transformTelemetryForChart(rawData);
+          const range = TIME_RANGES.find((r) => r.value === timeRange);
+          formatted = filterTelemetryByTimeRange(transformed, range?.ms ?? TIME_RANGES[1].ms);
+        }
+
+        if (!cancelled) {
           setApiTelemetry(formatted);
         }
-      } catch {
-        // silently fall back to live WebSocket data
+      } catch (error) {
+        console.error('[Analytics] Failed to load telemetry:', error);
+        if (!cancelled) {
+          setDataError('Unable to load historical telemetry data. Using live stream data.');
+        }
       } finally {
         if (!cancelled) setLoadingTelemetry(false);
       }
     }
-    fetchTelemetry();
+    fetchTelemetryData();
     return () => { cancelled = true; };
   }, [sensorFilter, timeRange]);
 
@@ -472,8 +429,6 @@ export default function Analytics() {
             low:      d.low      ?? d.stats?.low      ?? 0,
             critical: d.critical ?? d.stats?.critical ?? 0,
           });
-          setTotalAlertsCount(d.total ?? d.stats?.total ?? 0);
-          // Frequency chart
           const freq = d.frequencyOverTime ?? d.frequency ?? [];
           setApiFrequency(freq.map((b) => ({
             label:  b.label  ?? b.date ?? b._id ?? "",
@@ -489,6 +444,7 @@ export default function Analytics() {
       }
     }
     fetchAlertData();
+    return () => { cancelled = true; };
   }, [sensorFilter, timeRange]);
 
   // Fetch sensor fleet averages
@@ -506,29 +462,27 @@ export default function Analytics() {
       }
     }
     fetchSensors();
+    return () => { cancelled = true; };
   }, []);
 
-  // Merge: prefer backend historical data for longer time ranges; live WebSocket for 1h
+  // Merge: prefer live WebSocket buffer for 1h or if backend API returned empty; else backend API telemetry
   const filteredHistory = useMemo(() => {
-    // For 1h range, use live WebSocket buffer (most up-to-date)
-    if (timeRange === "1h" && Object.keys(historyBySensor).length > 0) {
+    if ((timeRange === "1h" || apiTelemetry.length === 0) && Object.keys(historyBySensor).length > 0) {
       const range = TIME_RANGES.find((r) => r.value === timeRange);
       const cutoff = Date.now() - (range?.ms ?? 3600000);
->>>>>>>>> Temporary merge branch 2
+      const source = sensorFilter === "All"
+        ? Object.values(historyBySensor).flat()
+        : (historyBySensor[sensorFilter] || []);
 
-    const source = sensorFilter === "All"
-      ? Object.values(historyBySensor).flat()
-      : (historyBySensor[sensorFilter] || []);
-
-      return [...source]
+      const live = [...source]
         .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0))
         .filter((p) => {
           if (!p.timestamp) return true;
           return new Date(p.timestamp).getTime() >= cutoff;
         });
+      if (live.length > 0) return live;
     }
 
-    // For 24h / 7d / 30d — use backend API data
     return apiTelemetry;
   }, [historyBySensor, apiTelemetry, sensorFilter, timeRange]);
 
@@ -537,7 +491,6 @@ export default function Analytics() {
     if (apiAlertStats.total > 0 || loadingAlertData === false) {
       return apiAlertStats;
     }
-    // Fallback: compute from AlertContext
     const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
     return {
       total:    filtered.length,
@@ -551,7 +504,6 @@ export default function Analytics() {
   // Frequency chart: use API data if available, else compute from AlertContext
   const frequencyData = useMemo(() => {
     if (apiFrequency.length > 0) return apiFrequency;
-    // Fallback: compute from AlertContext alerts
     const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const buckets = {};
@@ -562,7 +514,7 @@ export default function Analytics() {
       const key = `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
       buckets[key] = { label: days[d.getDay()], high: 0, medium: 0, low: 0 };
     }
-    filtered.forEach((alert) => {
+    (filtered || []).forEach((alert) => {
       const alertDate = new Date(alert.timestamp || alert.createdAt || Date.now());
       if (isNaN(alertDate.getTime())) return;
       const key = `${days[alertDate.getDay()]} ${alertDate.getDate()}/${alertDate.getMonth() + 1}`;
@@ -572,22 +524,13 @@ export default function Analytics() {
       else if (sev === "MEDIUM") buckets[key].medium += 1;
       else buckets[key].low += 1;
     });
-<<<<<<<<< Temporary merge branch 1
-  }, [historicalData, historyBySensor, sensorFilter, timeRange]);
-
-  const sensorOptions = ["All", ...sensorIds];
-  const hasData = filteredHistory.length > 0;
-  const isLoading = (isLoadingData || (connectionStatus === "reconnecting" && filteredHistory.length === 0));
-
-  // Active single metric config if not "all"
-=========
     return Object.values(buckets);
   }, [apiFrequency, alerts, sensorFilter]);
 
-  const sensorOptions = ["All", ...sensorIds];
+  const sensorOptions = ["All", ...(sensorIds || [])];
   const hasData = filteredHistory.length > 0;
   const isLoading = loadingTelemetry && filteredHistory.length === 0;
->>>>>>>>> Temporary merge branch 2
+  // Active single metric config if not "all"
   const currentMetricConfig = selectedMetric !== "all" ? METRIC_CONFIG[selectedMetric] : null;
 
   return (
@@ -674,13 +617,9 @@ export default function Analytics() {
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-header">
           <div>
-<<<<<<<<< Temporary merge branch 1
-            <span className="eyebrow">Real-Time Telemetry Stream • MongoDB Backend</span>
-=========
             <span className="eyebrow">
               {timeRange === "1h" ? "Real-Time Telemetry Stream" : "Historical Telemetry — " + TIME_RANGES.find(r => r.value === timeRange)?.label}
             </span>
->>>>>>>>> Temporary merge branch 2
             <h2>
               {selectedMetric === "all"
                 ? "Combined Telemetry Trends (Temperature, Pressure, Humidity, RPM)"
@@ -714,11 +653,7 @@ export default function Analytics() {
         {isLoading && (
           <div className="analytics-state-box">
             <div className="spinner" />
-<<<<<<<<< Temporary merge branch 1
-            <span>Loading telemetry data from MongoDB...</span>
-=========
             <span>Loading telemetry data from backend...</span>
->>>>>>>>> Temporary merge branch 2
           </div>
         )}
 
@@ -733,54 +668,39 @@ export default function Analytics() {
         )}
 
         {hasData && (
-          <div className="chart-wrap" style={{ height: 320, width: "100%" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              {selectedMetric === "all" ? (
-                // Combined multi-metric chart
-                <LineChart data={filteredHistory} margin={{ top: 12, right: 16, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                  <Tooltip content={<TelemetryTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                  <Line type="monotone" dataKey="temperature" name="Temperature (°C)" stroke="#7c3aed" strokeWidth={3} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="pressure"    name="Pressure (PSI)"    stroke="#0ea5e9" strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="humidity"    name="Humidity (%)"     stroke="#14b8a6" strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="rpm"         name="RPM"              stroke="#f97316" strokeWidth={2} dot={false} connectNulls />
-                </LineChart>
-              ) : (
-                // Dedicated Single Metric Area/Line Chart with styled Gradient
-                <AreaChart data={filteredHistory} margin={{ top: 12, right: 16, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id={currentMetricConfig.gradientId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={currentMetricConfig.color} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={currentMetricConfig.color} stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
-                    domain={currentMetricConfig.domain}
-                  />
-                  <Tooltip content={<TelemetryTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                  <Area
-                    type="monotone"
-                    dataKey={currentMetricConfig.key}
-                    name={`${currentMetricConfig.label} (${currentMetricConfig.unit})`}
-                    stroke={currentMetricConfig.color}
-                    strokeWidth={currentMetricConfig.strokeWidth}
-                    fill={`url(#${currentMetricConfig.gradientId})`}
-                    dot={false}
-                    connectNulls
-                    activeDot={{ r: 5 }}
-                  />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            {selectedMetric === "all" ? (
+              <LineChart width={900} height={340} data={filteredHistory} margin={{ top: 12, right: 16, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                <Tooltip content={<TelemetryTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <Line isAnimationActive={false} type="monotone" dataKey="temperature" name="Temperature (°C)" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4 }} connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="pressure" name="Pressure (PSI)" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line isAnimationActive={false} type="monotone" dataKey="rpm" name="RPM" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              </LineChart>
+            ) : (
+              <LineChart width={900} height={340} data={filteredHistory} margin={{ top: 12, right: 16, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                <Tooltip content={<TelemetryTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <Line
+                  isAnimationActive={false}
+                  type="monotone"
+                  dataKey={currentMetricConfig.key}
+                  name={`${currentMetricConfig.label} (${currentMetricConfig.unit})`}
+                  stroke={currentMetricConfig.color}
+                  strokeWidth={currentMetricConfig.strokeWidth}
+                  dot={{ r: 4, fill: currentMetricConfig.color }}
+                  connectNulls
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            )}
           </div>
         )}
       </div>

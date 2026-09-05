@@ -29,6 +29,7 @@ import {
   socket,
   subscribeToTelemetry,
 } from "../services/socket";
+import { getTelemetry } from "../services/api";
 
 const TelemetryContext = createContext(null);
 
@@ -159,10 +160,10 @@ export function TelemetryProvider({ children }) {
       const newPoint = {
         timestamp: data.timestamp || new Date().toISOString(),
         time: formattedTime,
-        temperature: typeof data.temperature === "number" ? data.temperature : (Number(data.temperature) || null),
-        pressure: typeof data.pressure === "number" ? data.pressure : (Number(data.pressure) || null),
-        rpm: typeof data.rpm === "number" ? data.rpm : (Number(data.rpm) || null),
-        humidity: typeof data.humidity === "number" ? data.humidity : (Number(data.humidity) || null),
+        temperature: parseNum(data.temperature),
+        pressure: parseNum(data.pressure),
+        rpm: parseNum(data.rpm),
+        humidity: parseNum(data.humidity),
       };
 
       return {
@@ -170,6 +171,84 @@ export function TelemetryProvider({ children }) {
         [sensorId]: [...oldHistory, newPoint].slice(-MAX_HISTORY_POINTS),
       };
     });
+  }, []);
+
+  /*
+   * Helper to safely convert raw telemetry fields to finite numbers
+   */
+  const parseNum = (val) => {
+    if (val === null || val === undefined) return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  };
+
+  /*
+   * Fetch initial historical telemetry records from backend API on mount
+   */
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadInitialTelemetry() {
+      try {
+        const response = await getTelemetry({ limit: 100 });
+        if (response.data?.success && Array.isArray(response.data?.data) && response.data.data.length > 0 && !isCancelled) {
+          const rawList = response.data.data;
+          const groupedHistory = {};
+          const latestMap = {};
+
+          rawList.forEach((item) => {
+            const sensorId = (item.sensorId || "TURBINE-001").trim();
+            const formattedTime = formatChartTime(item.timestamp);
+
+            const point = {
+              timestamp: item.timestamp || new Date().toISOString(),
+              time: formattedTime,
+              temperature: parseNum(item.temperature),
+              pressure: parseNum(item.pressure),
+              rpm: parseNum(item.rpm),
+              humidity: parseNum(item.humidity),
+            };
+
+            if (!groupedHistory[sensorId]) groupedHistory[sensorId] = [];
+            groupedHistory[sensorId].push(point);
+
+            latestMap[sensorId] = {
+              ...item,
+              sensorId,
+              formattedTime,
+            };
+          });
+
+          setHistoryBySensor((prev) => {
+            const merged = { ...prev };
+            Object.keys(groupedHistory).forEach((sid) => {
+              const prevPoints = merged[sid] || [];
+              const newPoints = groupedHistory[sid] || [];
+              // Deduplicate by timestamp and sort chronologically
+              const combined = [...prevPoints, ...newPoints];
+              const uniqueMap = new Map();
+              combined.forEach((pt) => {
+                const k = pt.timestamp || pt.time;
+                uniqueMap.set(k, pt);
+              });
+              merged[sid] = Array.from(uniqueMap.values())
+                .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0))
+                .slice(-MAX_HISTORY_POINTS);
+            });
+            return merged;
+          });
+
+          setTelemetryBySensor((prev) => ({
+            ...prev,
+            ...latestMap,
+          }));
+        }
+      } catch (err) {
+        console.warn("[TelemetryContext] Initial telemetry fetch fallback:", err.message);
+      }
+    }
+
+    loadInitialTelemetry();
+    return () => { isCancelled = true; };
   }, []);
 
   /*

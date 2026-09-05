@@ -16,7 +16,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -107,61 +106,64 @@ export default function TelemetryChart({ data, isPaused = false }) {
         )}
       </div>
 
-      <div className="chart-wrap" style={{ flex: 1, minHeight: "240px" }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
-            margin={{ top: 8, right: 12, left: -18, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }} />
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <LineChart
+          width={850}
+          height={280}
+          data={data}
+          margin={{ top: 12, right: 16, left: 10, bottom: 0 }}
+        >
+          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
+          <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }} />
 
             {/* Temperature — Step 4 */}
             {showTemp && (
               <Line
+                isAnimationActive={false}
                 type="monotone"
                 dataKey="temperature"
                 name="Temperature (°C)"
                 stroke="#7c3aed"
                 strokeWidth={3}
-                dot={false}
+                dot={{ r: 3 }}
                 connectNulls
-                activeDot={{ r: 4 }}
+                activeDot={{ r: 5 }}
               />
             )}
 
             {/* Pressure — Step 5 */}
             {showPressure && (
               <Line
+                isAnimationActive={false}
                 type="monotone"
                 dataKey="pressure"
                 name="Pressure (PSI)"
                 stroke="#0ea5e9"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 3 }}
                 connectNulls
-                activeDot={{ r: 4 }}
+                activeDot={{ r: 5 }}
               />
             )}
 
             {/* Humidity — Step 7 */}
             {showHumidity && (
               <Line
+                isAnimationActive={false}
                 type="monotone"
                 dataKey="humidity"
                 name="Humidity (%)"
                 stroke="#14b8a6"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 3 }}
                 connectNulls
-                activeDot={{ r: 4 }}
+                activeDot={{ r: 5 }}
               />
             )}
           </LineChart>
-        </ResponsiveContainer>
       </div>
     </div>
   );

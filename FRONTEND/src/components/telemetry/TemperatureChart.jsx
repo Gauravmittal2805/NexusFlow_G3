@@ -32,12 +32,12 @@ export default function TemperatureChart({ data }) {
   }
 
   return (
-    <div className="chart-wrap" style={{ width: "100%", height: "100%", minHeight: "220px" }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-          <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+    <div className="chart-wrap" style={{ width: "100%", height: "250px" }}>
+      <ResponsiveContainer width="100%" height={250}>
+        <LineChart data={data} margin={{ top: 12, right: 16, left: 10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
+          <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#64748b" }} domain={["auto", "auto"]} />
           <Tooltip formatter={(val) => [`${val} °C`, "Temperature"]} />
           <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "6px" }} />
           <Line
@@ -46,9 +46,9 @@ export default function TemperatureChart({ data }) {
             name="Temperature (°C)"
             stroke="#7c3aed"
             strokeWidth={3}
-            dot={false}
+            dot={{ r: 3 }}
             connectNulls
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 5 }}
           />
         </LineChart>
       </ResponsiveContainer>

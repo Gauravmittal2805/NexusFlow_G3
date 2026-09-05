@@ -17,7 +17,6 @@ import {
   Line,
   LineChart,
   ReferenceLine,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -44,21 +43,23 @@ export default function RPMChart({ data, isPaused = false }) {
   const maxRPM = rpmValues.length ? Math.ceil(Math.max(...rpmValues)  * 1.05) : 5000;
 
   return (
-    <div className="chart-wrap">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 8, right: 12, left: -10, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="4 4" vertical={false} />
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <LineChart
+        width={850}
+        height={250}
+        data={data}
+        margin={{ top: 12, right: 16, left: 10, bottom: 0 }}
+      >
+          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
 
-          <XAxis dataKey="time" tickLine={false} axisLine={false} />
+          <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
 
           <YAxis
             tickLine={false}
             axisLine={false}
             domain={[minRPM, maxRPM]}
             tickFormatter={(v) => `${v}`}
+            tick={{ fontSize: 11, fill: "#64748b" }}
           />
 
           <Tooltip formatter={(value) => [`${value} RPM`, "RPM"]} />
@@ -74,17 +75,17 @@ export default function RPMChart({ data, isPaused = false }) {
           />
 
           <Line
+            isAnimationActive={false}
             type="monotone"
             dataKey="rpm"
             name="RPM"
             stroke="#f97316"
             strokeWidth={2.5}
-            dot={false}
+            dot={{ r: 3 }}
             connectNulls
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 5 }}
           />
         </LineChart>
-      </ResponsiveContainer>
     </div>
   );
 }

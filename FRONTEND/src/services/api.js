@@ -21,18 +21,28 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-<<<<<<<<< Temporary merge branch 1
 // Telemetry API endpoints
-export const getTelemetry = () => api.get("/api/telemetry");
-export const getSensorTelemetry = (sensorId) =>
-  api.get(`/api/telemetry/${sensorId}`);
-=========
 export const getTelemetry = (params) => api.get("/api/telemetry", { params });
 export const getSensorTelemetry = (sensorId, params) =>
   api.get(`/api/telemetry/${sensorId}`, { params });
 export const getTelemetrySummary = (params) =>
   api.get("/api/telemetry/summary", { params });
->>>>>>>>> Temporary merge branch 2
+
+// Analytics API endpoints
+export const getAnalyticsOverview = (params) =>
+  api.get("/api/analytics/overview", { params });
+export const getAnalyticsTelemetry = (params) =>
+  api.get("/api/analytics/telemetry", { params });
+export const getAnalyticsAlerts = (params) =>
+  api.get("/api/analytics/alerts", { params });
+export const getAnalyticsSensors = () =>
+  api.get("/api/analytics/sensors");
+
+// Settings API endpoints
+export const getSettingsRequest = () =>
+  api.get("/api/settings");
+export const updateSettingsRequest = (payload) =>
+  api.put("/api/settings", payload);
 
 export const registerRequest = (payload) =>
   api.post("/api/auth/register", payload);
