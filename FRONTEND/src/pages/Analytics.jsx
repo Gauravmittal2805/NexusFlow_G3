@@ -28,12 +28,19 @@ import {
 import { useAlerts } from "../context/AlertContext";
 import { useTelemetry } from "../context/TelemetryContext";
 import {
+<<<<<<<<< Temporary merge branch 1
   fetchAllTelemetry,
   fetchSensorTelemetry,
   filterTelemetryByTimeRange,
   transformTelemetryForChart,
   groupTelemetrybySensor,
 } from "../services/telemetryService";
+=========
+  getAnalyticsAlerts,
+  getAnalyticsTelemetry,
+  getAnalyticsSensors,
+} from "../services/api";
+>>>>>>>>> Temporary merge branch 2
 
 // ── Time-range definitions (Step 4) ──────────────────────────────────────────
 
@@ -350,6 +357,7 @@ export default function Analytics() {
   // Step 4: Time range state
   const [timeRange, setTimeRange] = useState("24h");
 
+<<<<<<<<< Temporary merge branch 1
   // API data state
   const [historicalData, setHistoricalData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -406,21 +414,165 @@ export default function Analytics() {
     // Fallback to WebSocket context data
     const range = TIME_RANGES.find((r) => r.value === timeRange);
     const cutoff = Date.now() - (range?.ms ?? TIME_RANGES[1].ms);
+=========
+  // Backend analytics data
+  const [apiTelemetry, setApiTelemetry]       = useState([]);
+  const [apiAlertStats, setApiAlertStats]     = useState({ total: 0, high: 0, medium: 0, low: 0, critical: 0 });
+  const [apiFrequency, setApiFrequency]       = useState([]);
+  const [apiSensors, setApiSensors]           = useState([]);
+  const [loadingTelemetry, setLoadingTelemetry] = useState(false);
+  const [loadingAlertData, setLoadingAlertData] = useState(false);
+  const [loadingApiSensors, setLoadingApiSensors] = useState(false);
+  const [totalAlertsCount, setTotalAlertsCount] = useState(0);
+
+  // Fetch historical telemetry from backend when time range / sensor changes
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchTelemetry() {
+      setLoadingTelemetry(true);
+      try {
+        const params = { timeRange, limit: 500 };
+        if (sensorFilter !== "All") params.sensorId = sensorFilter;
+        const res = await getAnalyticsTelemetry(params);
+        if (!cancelled) {
+          const data = res.data?.data ?? [];
+          const formatted = data.map((item) => ({
+            ...item,
+            time: item.timestamp
+              ? new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+              : "",
+          }));
+          setApiTelemetry(formatted);
+        }
+      } catch {
+        // silently fall back to live WebSocket data
+      } finally {
+        if (!cancelled) setLoadingTelemetry(false);
+      }
+    }
+    fetchTelemetry();
+    return () => { cancelled = true; };
+  }, [sensorFilter, timeRange]);
+
+  // Fetch alert analytics (stats + frequency)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchAlertData() {
+      setLoadingAlertData(true);
+      try {
+        const params = { days: timeRange === "30d" ? 30 : timeRange === "7d" ? 7 : 1 };
+        if (sensorFilter !== "All") params.sensorId = sensorFilter;
+        const res = await getAnalyticsAlerts(params);
+        if (!cancelled) {
+          const d = res.data;
+          setApiAlertStats({
+            total:    d.total    ?? d.stats?.total    ?? 0,
+            high:     d.high     ?? d.stats?.high     ?? 0,
+            medium:   d.medium   ?? d.stats?.medium   ?? 0,
+            low:      d.low      ?? d.stats?.low      ?? 0,
+            critical: d.critical ?? d.stats?.critical ?? 0,
+          });
+          setTotalAlertsCount(d.total ?? d.stats?.total ?? 0);
+          // Frequency chart
+          const freq = d.frequencyOverTime ?? d.frequency ?? [];
+          setApiFrequency(freq.map((b) => ({
+            label:  b.label  ?? b.date ?? b._id ?? "",
+            high:   b.high   ?? 0,
+            medium: b.medium ?? 0,
+            low:    b.low    ?? 0,
+          })));
+        }
+      } catch {
+        // fall back to alerts from AlertContext
+      } finally {
+        if (!cancelled) setLoadingAlertData(false);
+      }
+    }
+    fetchAlertData();
+  }, [sensorFilter, timeRange]);
+
+  // Fetch sensor fleet averages
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchSensors() {
+      setLoadingApiSensors(true);
+      try {
+        const res = await getAnalyticsSensors();
+        if (!cancelled) {
+          setApiSensors(res.data?.sensors ?? []);
+        }
+      } catch { /* non-critical */ } finally {
+        if (!cancelled) setLoadingApiSensors(false);
+      }
+    }
+    fetchSensors();
+  }, []);
+
+  // Merge: prefer backend historical data for longer time ranges; live WebSocket for 1h
+  const filteredHistory = useMemo(() => {
+    // For 1h range, use live WebSocket buffer (most up-to-date)
+    if (timeRange === "1h" && Object.keys(historyBySensor).length > 0) {
+      const range = TIME_RANGES.find((r) => r.value === timeRange);
+      const cutoff = Date.now() - (range?.ms ?? 3600000);
+>>>>>>>>> Temporary merge branch 2
 
     const source = sensorFilter === "All"
       ? Object.values(historyBySensor).flat()
       : (historyBySensor[sensorFilter] || []);
 
-    // Sort ascending by timestamp for correct time-series chart rendering
-    const sorted = [...source].sort((a, b) =>
-      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
-    );
+      return [...source]
+        .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0))
+        .filter((p) => {
+          if (!p.timestamp) return true;
+          return new Date(p.timestamp).getTime() >= cutoff;
+        });
+    }
 
-    // Filter by timestamp range
-    return sorted.filter((p) => {
-      if (!p.timestamp) return true;
-      return new Date(p.timestamp).getTime() >= cutoff;
+    // For 24h / 7d / 30d — use backend API data
+    return apiTelemetry;
+  }, [historyBySensor, apiTelemetry, sensorFilter, timeRange]);
+
+  // Alert stats: use backend data if available, else compute from AlertContext
+  const alertStats = useMemo(() => {
+    if (apiAlertStats.total > 0 || loadingAlertData === false) {
+      return apiAlertStats;
+    }
+    // Fallback: compute from AlertContext
+    const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
+    return {
+      total:    filtered.length,
+      high:     filtered.filter((a) => ["HIGH", "CRITICAL"].includes((a.severity || "").toUpperCase())).length,
+      medium:   filtered.filter((a) => (a.severity || "").toUpperCase() === "MEDIUM").length,
+      low:      filtered.filter((a) => ["LOW", "INFO"].includes((a.severity || "").toUpperCase())).length,
+      critical: filtered.filter((a) => (a.severity || "").toUpperCase() === "CRITICAL").length,
+    };
+  }, [apiAlertStats, alerts, sensorFilter, loadingAlertData]);
+
+  // Frequency chart: use API data if available, else compute from AlertContext
+  const frequencyData = useMemo(() => {
+    if (apiFrequency.length > 0) return apiFrequency;
+    // Fallback: compute from AlertContext alerts
+    const filtered = sensorFilter === "All" ? alerts : alerts.filter((a) => a.sensorId === sensorFilter);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const buckets = {};
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
+      buckets[key] = { label: days[d.getDay()], high: 0, medium: 0, low: 0 };
+    }
+    filtered.forEach((alert) => {
+      const alertDate = new Date(alert.timestamp || alert.createdAt || Date.now());
+      if (isNaN(alertDate.getTime())) return;
+      const key = `${days[alertDate.getDay()]} ${alertDate.getDate()}/${alertDate.getMonth() + 1}`;
+      if (!buckets[key]) buckets[key] = { label: days[alertDate.getDay()], high: 0, medium: 0, low: 0 };
+      const sev = (alert.severity || "HIGH").toUpperCase();
+      if (sev === "HIGH" || sev === "CRITICAL") buckets[key].high += 1;
+      else if (sev === "MEDIUM") buckets[key].medium += 1;
+      else buckets[key].low += 1;
     });
+<<<<<<<<< Temporary merge branch 1
   }, [historicalData, historyBySensor, sensorFilter, timeRange]);
 
   const sensorOptions = ["All", ...sensorIds];
@@ -428,6 +580,14 @@ export default function Analytics() {
   const isLoading = (isLoadingData || (connectionStatus === "reconnecting" && filteredHistory.length === 0));
 
   // Active single metric config if not "all"
+=========
+    return Object.values(buckets);
+  }, [apiFrequency, alerts, sensorFilter]);
+
+  const sensorOptions = ["All", ...sensorIds];
+  const hasData = filteredHistory.length > 0;
+  const isLoading = loadingTelemetry && filteredHistory.length === 0;
+>>>>>>>>> Temporary merge branch 2
   const currentMetricConfig = selectedMetric !== "all" ? METRIC_CONFIG[selectedMetric] : null;
 
   return (
@@ -514,7 +674,13 @@ export default function Analytics() {
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-header">
           <div>
+<<<<<<<<< Temporary merge branch 1
             <span className="eyebrow">Real-Time Telemetry Stream • MongoDB Backend</span>
+=========
+            <span className="eyebrow">
+              {timeRange === "1h" ? "Real-Time Telemetry Stream" : "Historical Telemetry — " + TIME_RANGES.find(r => r.value === timeRange)?.label}
+            </span>
+>>>>>>>>> Temporary merge branch 2
             <h2>
               {selectedMetric === "all"
                 ? "Combined Telemetry Trends (Temperature, Pressure, Humidity, RPM)"
@@ -548,7 +714,11 @@ export default function Analytics() {
         {isLoading && (
           <div className="analytics-state-box">
             <div className="spinner" />
+<<<<<<<<< Temporary merge branch 1
             <span>Loading telemetry data from MongoDB...</span>
+=========
+            <span>Loading telemetry data from backend...</span>
+>>>>>>>>> Temporary merge branch 2
           </div>
         )}
 

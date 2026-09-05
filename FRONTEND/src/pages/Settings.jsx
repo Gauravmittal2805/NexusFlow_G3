@@ -12,6 +12,9 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTelemetry } from "../context/TelemetryContext";
 import api from "../services/api";
+=========
+import { getSettingsRequest, updateSettingsRequest } from "../services/api";
+>>>>>>>>> Temporary merge branch 2
 
 // ── Simple toggle component ────────────────────────────────────────────────────
 
@@ -146,12 +149,17 @@ export default function Settings() {
   const handleSave = async () => {
     setSaveStatus("saving");
     try {
+<<<<<<<<< Temporary merge branch 1
       // Prepare settings payload
       const settingsPayload = {
+=========
+      localStorage.setItem("nx_settings", JSON.stringify({
+>>>>>>>>> Temporary merge branch 2
         alertNotifications,
         highSeverityOnly,
         defaultSensor,
         telemetryInterval,
+<<<<<<<<< Temporary merge branch 1
       };
 
       // Persist to localStorage so the preference survives a refresh
@@ -173,6 +181,24 @@ export default function Settings() {
       console.error('[Settings] Error saving settings:', error);
       setSaveStatus("error");
       setTimeout(() => setSaveStatus(null), 3000);
+=========
+      }));
+    } catch { /* storage unavailable */ }
+
+    try {
+      await updateSettingsRequest({
+        alertNotifications,
+        highSeverityOnly,
+        defaultSensor,
+        telemetryInterval,
+      });
+      setSaveStatus("success");
+    } catch {
+      // Backend unavailable — saved to localStorage, show partial success
+      setSaveStatus("offline");
+    } finally {
+      setTimeout(() => setSaveStatus(null), 3500);
+>>>>>>>>> Temporary merge branch 2
     }
   };
 
